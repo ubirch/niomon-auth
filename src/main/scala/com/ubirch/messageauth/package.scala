@@ -2,7 +2,7 @@ package com.ubirch
 
 import akka.NotUsed
 import akka.actor.ActorSystem
-import akka.kafka._
+import akka.kafka.{ConsumerMessage, ProducerMessage, _}
 import akka.kafka.scaladsl.{Consumer, Producer}
 import akka.stream.scaladsl.{Flow, Keep, RestartSink, RestartSource, RunnableGraph, Sink, Source}
 import akka.stream.{ActorMaterializer, KillSwitches, UniqueKillSwitch}
@@ -17,7 +17,7 @@ import scala.concurrent.duration._
 
 package object messageauth extends StrictLogging {
   val conf: Config = ConfigFactory.load
-  implicit val system: ActorSystem = ActorSystem("message-decoder")
+  implicit val system: ActorSystem = ActorSystem("message-auth")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
@@ -54,14 +54,13 @@ package object messageauth extends StrictLogging {
       randomFactor = 0.2
     ) { () => Producer.commitableSink(producerSettings) }
 
-  def checkAuth(authStr: String): Boolean = {
-    // TODO
+  type AuthChecker = String => Boolean
+  val checkAuth: AuthChecker = AuthCheckers.get(conf.getString("checkingStrategy"))
 
-    true
-  }
-
-  val authGraph: RunnableGraph[UniqueKillSwitch] =
-    kafkaSource.viaMat(KillSwitches.single)(Keep.right).map { msg =>
+  private type FlowIn = ConsumerMessage.CommittableMessage[String, MessageEnvelope]
+  private type FlowOut = ProducerMessage.Message[String, MessageEnvelope, ConsumerMessage.CommittableOffset]
+  def authFlow(authChecker: AuthChecker): Flow[FlowIn, FlowOut, NotUsed] =
+    Flow[ConsumerMessage.CommittableMessage[String, MessageEnvelope]].map { msg =>
       val record = msg.record
       val headers = record.headersScala
       val authPassed = headers.get("Authorization") match {
@@ -70,12 +69,15 @@ package object messageauth extends StrictLogging {
           false
         case Some(auth) =>
           logger.debug("Authorization header present, checking...")
-          checkAuth(auth)
+          authChecker(auth)
       }
 
       val targetTopic = if (authPassed) authorizedTopic else unauthorizedTopic
       val outgoingRecord = record.toProducerRecord(targetTopic)
 
       ProducerMessage.Message(outgoingRecord, msg.committableOffset)
-    }.to(kafkaSink)
+  }
+
+  def authGraph(authChecker: AuthChecker): RunnableGraph[UniqueKillSwitch] =
+    kafkaSource.viaMat(KillSwitches.single)(Keep.right).via(authFlow(authChecker)).to(kafkaSink)
 }
