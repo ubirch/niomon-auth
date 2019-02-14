@@ -4,10 +4,11 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 
 import com.cumulocity.sdk.client.PlatformBuilder
+import com.typesafe.scalalogging.StrictLogging
 
 import scala.util.Try
 
-object AuthCheckers {
+object AuthCheckers extends StrictLogging {
   val defaultCumulocityBaseUrl: String = conf.getString("cumulocity.baseUrl")
   val defaultCumulocityTenant: String = conf.getString("cumulocity.tenant")
 
@@ -21,6 +22,8 @@ object AuthCheckers {
   }
 
   def checkCumulocityBasic(basicAuth: String): Boolean = {
+    logger.debug("doing basic authentication")
+
     val basicAuthDecoded = new String(Base64.getDecoder.decode(basicAuth.stripPrefix("Basic ")), StandardCharsets.UTF_8)
     val Array(username, password) = basicAuthDecoded.split(":", 2)
 
@@ -41,6 +44,9 @@ object AuthCheckers {
   private val authorizationCookieRegex = "authorization=([^;]*)".r.unanchored
 
   def checkCumulocityOAuth(headers: Map[String, String]): Boolean = {
+    logger.debug("doing OAuth authentication")
+    logger.warn("OAuth authentication is unsupported at `ubirch` tenant")
+
     val xsrfToken = headers.get("X-XSRF-TOKEN")
     val authorizationHeader = headers.get("Authorization")
     val authorizationCookie = headers.get("Cookie").flatMap { cookiesStr =>
@@ -53,8 +59,8 @@ object AuthCheckers {
     val oAuthToken = authorizationHeader.orElse(authorizationCookie)
 
     val cumulocity = PlatformBuilder.platform()
-      .withBaseUrl(defaultCumulocityBaseUrl)
-      .withTenant(defaultCumulocityTenant)
+      .withBaseUrl(defaultCumulocityBaseUrl) // TODO: support different baseUrls for different messages
+      .withTenant(defaultCumulocityTenant) // TODO: support different tenants for different messages
       .withOAuthAccessToken(oAuthToken.orNull)
       .withXsrfToken(xsrfToken.orNull)
       .build()
