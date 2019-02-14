@@ -35,7 +35,6 @@ package object messageauth extends StrictLogging {
       .withGroupId("message-auth")
       .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
 
-
   val incomingTopic: String = conf.getString("kafka.topic.incoming")
   val authorizedTopic: String = conf.getString("kafka.topic.authorized")
   val unauthorizedTopic: String = conf.getString("kafka.topic.unauthorized")
@@ -54,23 +53,17 @@ package object messageauth extends StrictLogging {
       randomFactor = 0.2
     ) { () => Producer.commitableSink(producerSettings) }
 
-  type AuthChecker = String => Boolean
+  type AuthChecker = Map[String, String] => Boolean
   val checkAuth: AuthChecker = AuthCheckers.get(conf.getString("checkingStrategy"))
 
   private type FlowIn = ConsumerMessage.CommittableMessage[String, MessageEnvelope]
   private type FlowOut = ProducerMessage.Message[String, MessageEnvelope, ConsumerMessage.CommittableOffset]
+
   def authFlow(authChecker: AuthChecker): Flow[FlowIn, FlowOut, NotUsed] =
     Flow[ConsumerMessage.CommittableMessage[String, MessageEnvelope]].map { msg =>
       val record = msg.record
       val headers = record.headersScala
-      val authPassed = headers.get("Authorization") match {
-        case None =>
-          logger.debug("Authorization header not present, auth failed")
-          false
-        case Some(auth) =>
-          logger.debug("Authorization header present, checking...")
-          authChecker(auth)
-      }
+      val authPassed = authChecker(headers)
 
       val targetTopic = if (authPassed) authorizedTopic else unauthorizedTopic
       val outgoingRecord = record.toProducerRecord(targetTopic)

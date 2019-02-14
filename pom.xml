@@ -52,6 +52,19 @@
     </properties>
 
     <dependencies>
+        <!-- cumulocity libs -->
+        <dependency>
+            <groupId>com.nsn.cumulocity.clients-java</groupId>
+            <artifactId>java-client</artifactId>
+            <version>9.16.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.nsn.cumulocity.model</groupId>
+            <artifactId>device-capability-model</artifactId>
+            <version>9.16.0</version>
+        </dependency>
+
+        <!-- ubirch libs -->
         <dependency>
             <groupId>com.ubirch</groupId>
             <artifactId>ubirch-protocol-java</artifactId>
@@ -61,12 +74,6 @@
             <groupId>com.ubirch.kafka</groupId>
             <artifactId>ubirch-kafka-envelope</artifactId>
             <version>${ubirch-kafka-envelope.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.skinny-framework</groupId>
-            <artifactId>skinny-http-client_${scala.major.version}</artifactId>
-            <version>${skinny-framework.version}</version>
         </dependency>
 
         <!-- scala, logging etc. -->
@@ -85,6 +92,7 @@
             <artifactId>logback-classic</artifactId>
             <version>${logback-classic.version}</version>
         </dependency>
+
         <!-- akka -->
         <dependency>
             <groupId>com.typesafe.akka</groupId>
@@ -156,6 +164,12 @@
             <groupId>com.fasterxml.jackson.module</groupId>
             <artifactId>jackson-module-scala_${scala.major.version}</artifactId>
             <version>2.9.8</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.skinny-framework</groupId>
+            <artifactId>skinny-http-client_${scala.major.version}</artifactId>
+            <version>${skinny-framework.version}</version>
         </dependency>
 
         <dependency>
@@ -325,6 +339,12 @@
             <id>bintray-cakesolutions-maven</id>
             <name>bintray</name>
             <url>http://dl.bintray.com/cakesolutions/maven</url>
+        </repository>
+
+        <repository>
+            <id>cumulocity-public</id>
+            <name>cumulocity</name>
+            <url>http://download.cumulocity.com/maven/repository</url>
         </repository>
 
     </repositories>
