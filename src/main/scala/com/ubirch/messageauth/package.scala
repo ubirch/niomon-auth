@@ -56,8 +56,8 @@ package object messageauth extends StrictLogging {
   type AuthChecker = Map[String, String] => Boolean
   val checkAuth: AuthChecker = AuthCheckers.get(conf.getString("checkingStrategy"))
 
-  private type FlowIn = ConsumerMessage.CommittableMessage[String, Array[Byte]]
-  private type FlowOut = ProducerMessage.Message[String, Array[Byte], ConsumerMessage.CommittableOffset]
+  type FlowIn = ConsumerMessage.CommittableMessage[String, Array[Byte]]
+  type FlowOut = ProducerMessage.Message[String, Array[Byte], ConsumerMessage.CommittableOffset]
 
   def authFlow(authChecker: AuthChecker): Flow[FlowIn, FlowOut, NotUsed] =
     Flow[ConsumerMessage.CommittableMessage[String, Array[Byte]]].map { msg =>

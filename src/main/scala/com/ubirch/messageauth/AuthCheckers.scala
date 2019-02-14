@@ -13,6 +13,7 @@ object AuthCheckers extends StrictLogging {
   val defaultCumulocityTenant: String = conf.getString("cumulocity.tenant")
 
   def alwaysAccept(_headers: Map[String, String]) = true
+  def alwaysReject(_headers: Map[String, String]) = false
 
   def checkCumulocity(headers: Map[String, String]): Boolean = {
     headers.get("Authorization") match {
