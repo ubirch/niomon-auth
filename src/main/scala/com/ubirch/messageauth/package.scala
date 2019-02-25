@@ -65,8 +65,13 @@ package object messageauth extends StrictLogging {
       val headers = record.headersScala
       val authPassed = authChecker(headers)
 
-      val targetTopic = if (authPassed) authorizedTopic else unauthorizedTopic
-      val outgoingRecord = record.toProducerRecord(targetTopic)
+      val outgoingRecord = if (authPassed) {
+        logger.debug(s"request with key [${record.key()}] is authorized")
+        record.toProducerRecord(authorizedTopic)
+      } else {
+        logger.debug(s"request with key [${record.key()}] is NOT authorized")
+        record.toProducerRecord(unauthorizedTopic).withExtraHeaders("http-status-code" -> "401")
+      }
 
       ProducerMessage.Message(outgoingRecord, msg.committableOffset)
   }
