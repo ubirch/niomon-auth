@@ -29,8 +29,8 @@ object AuthCheckers extends StrictLogging {
     val Array(username, password) = basicAuthDecoded.split(":", 2)
 
     val cumulocity = PlatformBuilder.platform()
-      .withBaseUrl(defaultCumulocityBaseUrl)
-      .withTenant(defaultCumulocityTenant)
+      .withBaseUrl(defaultCumulocityBaseUrl) // TODO: support different baseUrls for different messages
+      .withTenant(defaultCumulocityTenant) // TODO: support different tenants for different messages
       .withUsername(username)
       .withPassword(password)
       .build()

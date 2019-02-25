@@ -11,6 +11,8 @@ LABEL "com.ubirch.build"="${BUILD}"
 
 EXPOSE 8080
 EXPOSE 9010
+EXPOSE 2552
+EXPOSE 9020
 
 ENV _JAVA_OPTIONS "-Xms128m -Xmx256m -Djava.awt.headless=true"
 
@@ -24,6 +26,9 @@ ENTRYPOINT [ \
   "-Dcom.sun.management.jmxremote.local.only=false", \
   "-Dcom.sun.management.jmxremote.authenticate=false", \
   "-Dcom.sun.management.jmxremote.ssl=false", \
+  "-Dconfig.resource=application-docker.conf", \
+  "-Dlogback.configurationFile=logback-docker.xml", \
+  "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=9020", \
   "-jar", "/usr/share/service/main.jar" \
 ]
 

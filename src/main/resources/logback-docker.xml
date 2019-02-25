@@ -29,10 +29,16 @@
         </encoder>
     </appender>
 
+    <appender name="JSONSTDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <timeZone>UTC</timeZone>
+        </encoder>
+    </appender>
+
     <logger name="org.apache.kafka" level="INFO"/>
     <logger name="com.ubirch" level="DEBUG"/>
 
     <root level="INFO">
-        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="JSONSTDOUT"/>
     </root>
 </configuration>
