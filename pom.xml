@@ -262,7 +262,7 @@
                         <manifest>
                             <addClasspath>true</addClasspath>
                             <classpathPrefix>lib/</classpathPrefix>
-                            <mainClass>com.ubirch.signatureverifier.Main</mainClass>
+                            <mainClass>com.ubirch.messageauth.Main</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
