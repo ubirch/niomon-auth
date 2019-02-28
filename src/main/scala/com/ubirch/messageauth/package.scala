@@ -74,7 +74,10 @@ package object messageauth extends StrictLogging {
       }
 
       ProducerMessage.Message(outgoingRecord, msg.committableOffset)
-  }
+    }.mapError { case e =>
+      logger.error("unexpected error in the auth flow", e)
+      e
+    }
 
   def authGraph(authChecker: AuthChecker): RunnableGraph[UniqueKillSwitch] =
     kafkaSource.viaMat(KillSwitches.single)(Keep.right).via(authFlow(authChecker)).to(kafkaSink)
