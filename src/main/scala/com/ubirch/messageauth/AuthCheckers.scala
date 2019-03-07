@@ -13,24 +13,33 @@ object AuthCheckers extends StrictLogging {
   val defaultCumulocityTenant: String = conf.getString("cumulocity.tenant")
 
   def alwaysAccept(_headers: Map[String, String]) = true
+
   def alwaysReject(_headers: Map[String, String]) = false
 
   def checkCumulocity(headers: Map[String, String]): Boolean = {
+    val cumulocityInfo = getCumulocityInfo(headers)
     headers.get("Authorization") match {
-      case Some(auth) if auth.startsWith("Basic ") => checkCumulocityBasic(auth)
-      case None => checkCumulocityOAuth(headers)
+      case Some(auth) if auth.startsWith("Basic ") => checkCumulocityBasic(auth, cumulocityInfo)
+      case None => checkCumulocityOAuth(headers, cumulocityInfo)
     }
   }
 
-  def checkCumulocityBasic(basicAuth: String): Boolean = {
+  case class CumulocityInfo(baseUrl: String, tenant: String)
+
+  def getCumulocityInfo(headers: Map[String, String]): CumulocityInfo = {
+    CumulocityInfo(headers.getOrElse("X-Cumulocity-BaseUrl", defaultCumulocityBaseUrl),
+      headers.getOrElse("X-Cumulocity-Tenant", defaultCumulocityTenant))
+  }
+
+  def checkCumulocityBasic(basicAuth: String, cumulocityInfo: CumulocityInfo): Boolean = {
     logger.debug("doing basic authentication")
 
     val basicAuthDecoded = new String(Base64.getDecoder.decode(basicAuth.stripPrefix("Basic ")), StandardCharsets.UTF_8)
     val Array(username, password) = basicAuthDecoded.split(":", 2)
 
     val cumulocity = PlatformBuilder.platform()
-      .withBaseUrl(defaultCumulocityBaseUrl) // TODO: support different baseUrls for different messages
-      .withTenant(defaultCumulocityTenant) // TODO: support different tenants for different messages
+      .withBaseUrl(cumulocityInfo.baseUrl)
+      .withTenant(cumulocityInfo.tenant)
       .withUsername(username)
       .withPassword(password)
       .build()
@@ -44,7 +53,7 @@ object AuthCheckers extends StrictLogging {
 
   private val authorizationCookieRegex = "authorization=([^;]*)".r.unanchored
 
-  def checkCumulocityOAuth(headers: Map[String, String]): Boolean = {
+  def checkCumulocityOAuth(headers: Map[String, String], cumulocityInfo: CumulocityInfo): Boolean = {
     logger.debug("doing OAuth authentication")
     logger.warn("OAuth authentication is unsupported at `ubirch` tenant")
 
@@ -60,8 +69,8 @@ object AuthCheckers extends StrictLogging {
     val oAuthToken = authorizationHeader.orElse(authorizationCookie)
 
     val cumulocity = PlatformBuilder.platform()
-      .withBaseUrl(defaultCumulocityBaseUrl) // TODO: support different baseUrls for different messages
-      .withTenant(defaultCumulocityTenant) // TODO: support different tenants for different messages
+      .withBaseUrl(cumulocityInfo.baseUrl)
+      .withTenant(cumulocityInfo.tenant)
       .withOAuthAccessToken(oAuthToken.orNull)
       .withXsrfToken(xsrfToken.orNull)
       .build()
