@@ -3,27 +3,31 @@ package com.ubirch.messageauth
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Base64
 
-import akka.NotUsed
-import akka.kafka.ConsumerMessage
-import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
-import com.ubirch.kafka._
-import org.apache.kafka.clients.consumer.ConsumerRecord
+import com.typesafe.config.ConfigFactory
+import net.manub.embeddedkafka.EmbeddedKafka
+import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.header.Header
-import org.apache.kafka.common.header.internals.{RecordHeader, RecordHeaders}
+import org.apache.kafka.common.header.internals.RecordHeader
+import org.apache.kafka.common.serialization.{ByteArraySerializer, StringDeserializer}
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Awaitable, TimeoutException}
 
-class MessageAuthTest extends FlatSpec with Matchers {
+//noinspection TypeAnnotation
+class MessageAuthTest extends FlatSpec with Matchers with EmbeddedKafka {
+  implicit val bytesSerializer = new ByteArraySerializer
+  implicit val stringDeserializer = new StringDeserializer
+  val config = ConfigFactory.load().getConfig("message-auth")
+
   // ignored by default, because requires username and password to be passed in through env variables
   "checkCumulocity" should "authorize with basic auth passed in" ignore {
     val username = System.getenv("TEST_USERNAME")
     val password = System.getenv("TEST_PASSWORD")
     val basicAuth = s"Basic ${Base64.getEncoder.encodeToString(s"$username:$password".getBytes(UTF_8))}"
 
-    AuthCheckers.checkCumulocity(Map("Authorization" -> basicAuth)) should equal(true)
+    new AuthCheckers(config).checkCumulocity(Map("Authorization" -> basicAuth)) should equal(true)
   }
 
   // our cumulocity tenant doesn't yet support logging in through OAuth, so this is disabled
@@ -32,62 +36,78 @@ class MessageAuthTest extends FlatSpec with Matchers {
     val xsrfToken = System.getenv("TEST_XSRF_TOKEN")
     val headers = Map("X-XSRF-TOKEN" -> xsrfToken, "Cookie" -> s"authorization=$oauthToken")
 
-    AuthCheckers.checkCumulocity(headers) should equal(true)
+    new AuthCheckers(config).checkCumulocity(headers) should equal(true)
   }
 
   "authFlow" should "direct messages to authorized topic if authorized" in {
-    val flow = authFlow(AuthCheckers.alwaysAccept)
+    withRunningKafka {
+      val microservice = new MessageAuthMicroservice(new AuthCheckers(_).alwaysAccept)
+      val control = microservice.run
 
-    val res = run(flow)(
-      arbitraryMessageWithHeaders("X-Please-Let-Me-Pass" -> "true"),
-      arbitraryMessageWithHeaders("X-Foo" -> "foo"),
-      arbitraryMessageWithHeaders("X-Bar" -> "bar"),
-    )
+      val input = microservice.inputTopics.head
+      publishToKafka(arbitraryRecordWithHeaders(input, "X-Please-Let-Me-Pass" -> "true"))
+      publishToKafka(arbitraryRecordWithHeaders(input, "X-Foo" -> "foo"))
+      publishToKafka(arbitraryRecordWithHeaders(input, "X-Bar" -> "bar"))
 
-    res(authorizedTopic).size should equal(3)
-    res.get(unauthorizedTopic) should equal(None)
+      val authorized = consumeNumberStringMessagesFrom(microservice.authorizedTopic, 3)
+
+      // assert no pending messages on unauthorized topic
+      a[TimeoutException] should be thrownBy {
+        consumeNumberMessagesFromTopics[String](Set(microservice.unauthorizedTopic), 1, timeout = 1.second)
+      }
+
+      authorized.size should equal(3)
+
+      await(control.drainAndShutdown()(microservice.system.dispatcher))
+    }
   }
 
   it should "direct messages to unauthorized topic if unauthorized" in {
-    val flow = authFlow(AuthCheckers.alwaysReject)
+    withRunningKafka {
+      val microservice = new MessageAuthMicroservice(new AuthCheckers(_).alwaysReject)
+      val control = microservice.run
 
-    val res = run(flow)(
-      arbitraryMessageWithHeaders("X-Please-Let-Me-Pass" -> "true"),
-      arbitraryMessageWithHeaders("X-Foo" -> "foo"),
-      arbitraryMessageWithHeaders("X-Bar" -> "bar")
-    )
+      val input = microservice.inputTopics.head
+      publishToKafka(arbitraryRecordWithHeaders(input, "X-Please-Let-Me-Pass" -> "true"))
+      publishToKafka(arbitraryRecordWithHeaders(input, "X-Foo" -> "foo"))
+      publishToKafka(arbitraryRecordWithHeaders(input, "X-Bar" -> "bar"))
 
-    res.get(authorizedTopic) should equal(None)
-    res(unauthorizedTopic).size should equal(3)
+      val unauthorized = consumeNumberStringMessagesFrom(microservice.unauthorizedTopic, 3)
+
+      // assert no pending messages on authorized topic
+      a[TimeoutException] should be thrownBy {
+        consumeNumberMessagesFromTopics[String](Set(microservice.authorizedTopic), 1, timeout = 1.second)
+      }
+
+      unauthorized.size should equal(3)
+      await(control.drainAndShutdown()(microservice.system.dispatcher))
+    }
   }
 
   it should "direct messages according to passed AuthChecker" in {
-    val flow = authFlow { headers => headers.get("X-Must-Be-Even").exists(_.toInt % 2 == 0) }
+    withRunningKafka {
+      val microservice = new MessageAuthMicroservice(_ => { headers => headers.get("X-Must-Be-Even").exists(_.toInt % 2 == 0) })
+      val control = microservice.run
 
-    val res = run(flow)(
-      arbitraryMessageWithHeaders("X-Must-Be-Even" -> "0"),
-      arbitraryMessageWithHeaders("X-Must-Be-Even" -> "1"),
-      arbitraryMessageWithHeaders("X-Must-Be-Even" -> "2")
-    )
+      val input = microservice.inputTopics.head
+      publishToKafka(arbitraryRecordWithHeaders(input, "X-Must-Be-Even" -> "0"))
+      publishToKafka(arbitraryRecordWithHeaders(input, "X-Must-Be-Even" -> "1"))
+      publishToKafka(arbitraryRecordWithHeaders(input, "X-Must-Be-Even" -> "2"))
 
-    res(authorizedTopic).map(_.record.headersScala("X-Must-Be-Even")) should contain only ("0", "2")
-    res(unauthorizedTopic).map(_.record.headersScala("X-Must-Be-Even")) should contain only "1"
+      val authorized = consumeNumberStringMessagesFrom(microservice.authorizedTopic, 2)
+      val unauthorized = consumeNumberStringMessagesFrom(microservice.unauthorizedTopic, 1)
+
+      authorized.size should equal (2)
+      unauthorized.size should equal (1)
+
+      await(control.drainAndShutdown()(microservice.system.dispatcher))
+    }
   }
 
-  private def run(flow: Flow[FlowIn, FlowOut, NotUsed])(messages: FlowIn*) =
-    Await.result(Source(messages.toList)
-      .via(flow)
-      .groupBy(2, x => x.record.topic())
-      .map(List(_))
-      .reduce((acc, n) => n ++ acc)
-      .mergeSubstreams
-      .toMat(Sink.seq)(Keep.right)
-      .run(), 5.seconds)
-      .groupBy(_.head.record.topic()).mapValues(_.flatten)
+  private def arbitraryRecordWithHeaders(topic: String, headers: (String, String)*): ProducerRecord[String, Array[Byte]] =
+    new ProducerRecord[String, Array[Byte]](topic, null, null, "key", "value".getBytes(UTF_8),
+      (for {(k, v) <- headers} yield new RecordHeader(k, v.getBytes(UTF_8)): Header).toList.asJava
+    )
 
-  private def arbitraryMessageWithHeaders(headers: (String, String)*): ConsumerMessage.CommittableMessage[String, Array[Byte]] =
-    ConsumerMessage.CommittableMessage(
-      new ConsumerRecord[String, Array[Byte]]("foo", 0, 0, 0, null, 0, 3, 5, "key", "value".getBytes(UTF_8),
-        new RecordHeaders((for {(k, v) <- headers} yield new RecordHeader(k, v.getBytes(UTF_8)): Header).toList.asJava)),
-      null)
+  def await[T](x: Awaitable[T]): T = Await.result(x, Duration.Inf)
 }

@@ -4,11 +4,13 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 
 import com.cumulocity.sdk.client.PlatformBuilder
+import com.typesafe.config.Config
 import com.typesafe.scalalogging.StrictLogging
+import com.ubirch.messageauth.AuthCheckers.AuthChecker
 
 import scala.util.Try
 
-object AuthCheckers extends StrictLogging {
+class AuthCheckers(conf: Config) extends StrictLogging {
   val defaultCumulocityBaseUrl: String = conf.getString("cumulocity.baseUrl")
   val defaultCumulocityTenant: String = conf.getString("cumulocity.tenant")
 
@@ -86,4 +88,10 @@ object AuthCheckers extends StrictLogging {
     case "alwaysAccept" => alwaysAccept
     case "checkCumulocity" => checkCumulocity
   }
+
+  def getDefault: AuthChecker = get(conf.getString("checkingStrategy"))
+}
+
+object AuthCheckers {
+  type AuthChecker = Map[String, String] => Boolean
 }
