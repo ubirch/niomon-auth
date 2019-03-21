@@ -7,8 +7,9 @@ import com.ubirch.messageauth.AuthCheckers.AuthChecker
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.producer.ProducerRecord
 
-class MessageAuthMicroservice(authCheckerFactory: Config => AuthChecker) extends NioMicroservice[Array[Byte], Array[Byte]]("message-auth") {
-  val checkAuth: AuthChecker = authCheckerFactory(config)
+class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => AuthChecker)
+  extends NioMicroservice[Array[Byte], Array[Byte]]("message-auth") {
+  val checkAuth: AuthChecker = authCheckerFactory(context)
   val authorizedTopic: String = outputTopics("authorized")
   val unauthorizedTopic: String = outputTopics("unauthorized")
 

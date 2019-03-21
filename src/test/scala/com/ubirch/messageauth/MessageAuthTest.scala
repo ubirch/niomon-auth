@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Base64
 
 import com.typesafe.config.ConfigFactory
+import com.ubirch.niomon.base.NioMicroservice
 import net.manub.embeddedkafka.EmbeddedKafka
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.header.Header
@@ -19,7 +20,9 @@ import scala.concurrent.{Await, Awaitable, TimeoutException}
 class MessageAuthTest extends FlatSpec with Matchers with EmbeddedKafka {
   implicit val bytesSerializer = new ByteArraySerializer
   implicit val stringDeserializer = new StringDeserializer
-  val config = ConfigFactory.load().getConfig("message-auth")
+
+  // TODO: figure out what to do with redis in tests - run an embedded server?
+  val context = new NioMicroservice.Context(???, ConfigFactory.load().getConfig("message-auth"))
 
   // ignored by default, because requires username and password to be passed in through env variables
   "checkCumulocity" should "authorize with basic auth passed in" ignore {
@@ -27,7 +30,7 @@ class MessageAuthTest extends FlatSpec with Matchers with EmbeddedKafka {
     val password = System.getenv("TEST_PASSWORD")
     val basicAuth = s"Basic ${Base64.getEncoder.encodeToString(s"$username:$password".getBytes(UTF_8))}"
 
-    new AuthCheckers(config).checkCumulocity(Map("Authorization" -> basicAuth)) should equal(true)
+    new AuthCheckers(context).checkCumulocity(Map("Authorization" -> basicAuth)) should equal(true)
   }
 
   // our cumulocity tenant doesn't yet support logging in through OAuth, so this is disabled
@@ -36,7 +39,7 @@ class MessageAuthTest extends FlatSpec with Matchers with EmbeddedKafka {
     val xsrfToken = System.getenv("TEST_XSRF_TOKEN")
     val headers = Map("X-XSRF-TOKEN" -> xsrfToken, "Cookie" -> s"authorization=$oauthToken")
 
-    new AuthCheckers(config).checkCumulocity(headers) should equal(true)
+    new AuthCheckers(context).checkCumulocity(headers) should equal(true)
   }
 
   "authFlow" should "direct messages to authorized topic if authorized" in {

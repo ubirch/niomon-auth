@@ -4,15 +4,15 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 
 import com.cumulocity.sdk.client.PlatformBuilder
-import com.typesafe.config.Config
 import com.typesafe.scalalogging.StrictLogging
 import com.ubirch.messageauth.AuthCheckers.AuthChecker
+import com.ubirch.niomon.base.NioMicroservice
 
 import scala.util.Try
 
-class AuthCheckers(conf: Config) extends StrictLogging {
-  val defaultCumulocityBaseUrl: String = conf.getString("cumulocity.baseUrl")
-  val defaultCumulocityTenant: String = conf.getString("cumulocity.tenant")
+class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
+  val defaultCumulocityBaseUrl: String = context.config.getString("cumulocity.baseUrl")
+  val defaultCumulocityTenant: String = context.config.getString("cumulocity.tenant")
 
   def alwaysAccept(_headers: Map[String, String]) = true
 
@@ -21,8 +21,8 @@ class AuthCheckers(conf: Config) extends StrictLogging {
   def checkCumulocity(headers: Map[String, String]): Boolean = {
     val cumulocityInfo = getCumulocityInfo(headers)
     headers.get("Authorization") match {
-      case Some(auth) if auth.startsWith("Basic ") => checkCumulocityBasic(auth, cumulocityInfo)
-      case None => checkCumulocityOAuth(headers, cumulocityInfo)
+      case Some(auth) if auth.startsWith("Basic ") => checkCumulocityBasicCached((auth, cumulocityInfo))
+      case None => checkCumulocityOAuthCached((headers, cumulocityInfo))
     }
   }
 
@@ -32,6 +32,13 @@ class AuthCheckers(conf: Config) extends StrictLogging {
     CumulocityInfo(headers.getOrElse("X-Cumulocity-BaseUrl", defaultCumulocityBaseUrl),
       headers.getOrElse("X-Cumulocity-Tenant", defaultCumulocityTenant))
   }
+
+  def checkCumulocityBasicKey(authAndInfo: (String, CumulocityInfo)): String = authAndInfo.toString()
+
+  lazy val checkCumulocityBasicCached: ((String, CumulocityInfo)) => Boolean =
+    context.cached("cumulocity-basic-auth-cache", checkCumulocityBasicKey) {
+      case (basicAuth, cumulocityInfo) => checkCumulocityBasic(basicAuth, cumulocityInfo)
+    }
 
   def checkCumulocityBasic(basicAuth: String, cumulocityInfo: CumulocityInfo): Boolean = {
     logger.debug("doing basic authentication")
@@ -52,6 +59,14 @@ class AuthCheckers(conf: Config) extends StrictLogging {
 
     res
   }
+
+  def checkCumulocityOAuthKey(headersAndInfo: (Map[String, String], CumulocityInfo)): String =
+    (headersAndInfo._1("X-XSRF-TOKEN"), headersAndInfo._1("Authorization"), headersAndInfo._1("Cookie"), headersAndInfo._2).toString()
+
+  lazy val checkCumulocityOAuthCached: ((Map[String, String], CumulocityInfo)) => Boolean =
+    context.cached("cumulocity-oauth-cache", checkCumulocityOAuthKey) {
+      case (headers, cumulocityInfo) => checkCumulocityOAuth(headers, cumulocityInfo)
+    }
 
   private val authorizationCookieRegex = "authorization=([^;]*)".r.unanchored
 
@@ -89,7 +104,7 @@ class AuthCheckers(conf: Config) extends StrictLogging {
     case "checkCumulocity" => checkCumulocity
   }
 
-  def getDefault: AuthChecker = get(conf.getString("checkingStrategy"))
+  def getDefault: AuthChecker = get(context.config.getString("checkingStrategy"))
 }
 
 object AuthCheckers {
