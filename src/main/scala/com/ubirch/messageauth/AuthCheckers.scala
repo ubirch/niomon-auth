@@ -36,8 +36,8 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   def checkCumulocityBasicKey(authAndInfo: (String, CumulocityInfo)): String = authAndInfo.toString()
 
   lazy val checkCumulocityBasicCached: ((String, CumulocityInfo)) => Boolean =
-    context.cached("cumulocity-basic-auth-cache", checkCumulocityBasicKey) {
-      case (basicAuth, cumulocityInfo) => checkCumulocityBasic(basicAuth, cumulocityInfo)
+    context.cached("cumulocity-basic-auth-cache") { key: (String, CumulocityInfo) =>
+      checkCumulocityBasic(key._1, key._2)
     }
 
   def checkCumulocityBasic(basicAuth: String, cumulocityInfo: CumulocityInfo): Boolean = {
@@ -60,12 +60,14 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     res
   }
 
-  def checkCumulocityOAuthKey(headersAndInfo: (Map[String, String], CumulocityInfo)): String =
-    (headersAndInfo._1("X-XSRF-TOKEN"), headersAndInfo._1("Authorization"), headersAndInfo._1("Cookie"), headersAndInfo._2).toString()
+  implicit object CheckCumulocityOAuthKey extends NioMicroservice.CacheKey[(Map[String, String], CumulocityInfo)] {
+    override def key(headersAndInfo: (Map[String, String], CumulocityInfo)): String =
+      (headersAndInfo._1("X-XSRF-TOKEN"), headersAndInfo._1("Authorization"), headersAndInfo._1("Cookie"), headersAndInfo._2).toString()
+  }
 
   lazy val checkCumulocityOAuthCached: ((Map[String, String], CumulocityInfo)) => Boolean =
-    context.cached("cumulocity-oauth-cache", checkCumulocityOAuthKey) {
-      case (headers, cumulocityInfo) => checkCumulocityOAuth(headers, cumulocityInfo)
+    context.cached("cumulocity-oauth-cache") { key: (Map[String, String], CumulocityInfo) =>
+      checkCumulocityOAuth(key._1, key._2)
     }
 
   private val authorizationCookieRegex = "authorization=([^;]*)".r.unanchored
