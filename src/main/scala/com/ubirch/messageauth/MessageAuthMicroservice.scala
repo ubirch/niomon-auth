@@ -1,6 +1,5 @@
 package com.ubirch.messageauth
 
-import com.typesafe.config.Config
 import com.ubirch.niomon.base.NioMicroservice
 import com.ubirch.kafka._
 import com.ubirch.messageauth.AuthCheckers.AuthChecker
