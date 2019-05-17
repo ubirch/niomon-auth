@@ -14,9 +14,9 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   val defaultCumulocityBaseUrl: String = context.config.getString("cumulocity.baseUrl")
   val defaultCumulocityTenant: String = context.config.getString("cumulocity.tenant")
 
-  def alwaysAccept(_headers: Map[String, String]) = true
+  val alwaysAccept: Map[String, String] => Boolean = _ => true
 
-  def alwaysReject(_headers: Map[String, String]) = false
+  val alwaysReject: Map[String, String] => Boolean = _ => false
 
   def checkCumulocity(headers: Map[String, String]): Boolean = {
     val cumulocityInfo = getCumulocityInfo(headers)
