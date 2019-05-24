@@ -10,14 +10,14 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.header.Header
 import org.apache.kafka.common.header.internals.RecordHeader
 import org.apache.kafka.common.serialization.{ByteArraySerializer, StringDeserializer}
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Awaitable, TimeoutException}
 
 //noinspection TypeAnnotation
-class MessageAuthTest extends FlatSpec with Matchers with EmbeddedKafka {
+class MessageAuthTest extends FlatSpec with Matchers with EmbeddedKafka with BeforeAndAfterAll {
   implicit val bytesSerializer = new ByteArraySerializer
   implicit val stringDeserializer = new StringDeserializer
 
@@ -113,4 +113,12 @@ class MessageAuthTest extends FlatSpec with Matchers with EmbeddedKafka {
     )
 
   def await[T](x: Awaitable[T]): T = Await.result(x, Duration.Inf)
+
+  override protected def beforeAll(): Unit = {
+    val _ = EmbeddedKafka.start()
+  }
+  override protected def afterAll(): Unit = {
+    val _ = EmbeddedKafka.stop()
+  }
+  def withRunningKafka[T](b: => T): T = b
 }
