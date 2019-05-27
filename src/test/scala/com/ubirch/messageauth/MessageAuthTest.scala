@@ -4,8 +4,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Base64
 
 import com.typesafe.config.ConfigFactory
-import com.ubirch.niomon.base.NioMicroservice
-import net.manub.embeddedkafka.EmbeddedKafka
+import com.ubirch.niomon.base.{NioMicroservice, NioMicroserviceMock}
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.header.Header
 import org.apache.kafka.common.header.internals.RecordHeader
@@ -13,11 +12,11 @@ import org.apache.kafka.common.serialization.{ByteArraySerializer, StringDeseria
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.collection.JavaConverters._
+import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Awaitable, TimeoutException}
 
 //noinspection TypeAnnotation
-class MessageAuthTest extends FlatSpec with Matchers with EmbeddedKafka with BeforeAndAfterAll {
+class MessageAuthTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   implicit val bytesSerializer = new ByteArraySerializer
   implicit val stringDeserializer = new StringDeserializer
 
@@ -43,82 +42,64 @@ class MessageAuthTest extends FlatSpec with Matchers with EmbeddedKafka with Bef
   }
 
   "authFlow" should "direct messages to authorized topic if authorized" in {
-    withRunningKafka {
-      val microservice = new MessageAuthMicroservice(new AuthCheckers(_).alwaysAccept)
-      val control = microservice.run
+    val microservice = messageAuthMicroservice(new AuthCheckers(_).alwaysAccept)
+    microservice.outputTopics = Map("authorized" -> "auth", "unauthorized" -> "unauth")
+    import microservice.kafkaMocks._
 
-      val input = microservice.inputTopics.head
-      publishToKafka(arbitraryRecordWithHeaders(input, "X-Please-Let-Me-Pass" -> "true"))
-      publishToKafka(arbitraryRecordWithHeaders(input, "X-Foo" -> "foo"))
-      publishToKafka(arbitraryRecordWithHeaders(input, "X-Bar" -> "bar"))
+    publishToKafka(arbitraryRecordWithHeaders("input", "X-Please-Let-Me-Pass" -> "true"))
+    publishToKafka(arbitraryRecordWithHeaders("input", "X-Foo" -> "foo"))
+    publishToKafka(arbitraryRecordWithHeaders("input", "X-Bar" -> "bar"))
 
-      val authorized = consumeNumberStringMessagesFrom(microservice.authorizedTopic, 3)
+    val authorized = consumeNumberStringMessagesFrom("auth", 3)
 
-      // assert no pending messages on unauthorized topic
-      a[TimeoutException] should be thrownBy {
-        consumeNumberMessagesFromTopics[String](Set(microservice.unauthorizedTopic), 1, timeout = 1.second)
-      }
-
-      authorized.size should equal(3)
-
-      await(control.drainAndShutdown()(microservice.system.dispatcher))
+    // assert no pending messages on unauthorized topic
+    a[TimeoutException] should be thrownBy {
+      consumeNumberMessagesFromTopics[String](Set("unauth"), 1, timeout = 1.second)
     }
+
+    authorized.size should equal(3)
   }
 
   it should "direct messages to unauthorized topic if unauthorized" in {
-    withRunningKafka {
-      val microservice = new MessageAuthMicroservice(new AuthCheckers(_).alwaysReject)
-      val control = microservice.run
+    val microservice = messageAuthMicroservice(new AuthCheckers(_).alwaysReject)
+    microservice.outputTopics = Map("authorized" -> "auth", "unauthorized" -> "unauth")
+    import microservice.kafkaMocks._
 
-      val input = microservice.inputTopics.head
-      publishToKafka(arbitraryRecordWithHeaders(input, "X-Please-Let-Me-Pass" -> "true"))
-      publishToKafka(arbitraryRecordWithHeaders(input, "X-Foo" -> "foo"))
-      publishToKafka(arbitraryRecordWithHeaders(input, "X-Bar" -> "bar"))
+    publishToKafka(arbitraryRecordWithHeaders("input", "X-Please-Let-Me-Pass" -> "true"))
+    publishToKafka(arbitraryRecordWithHeaders("input", "X-Foo" -> "foo"))
+    publishToKafka(arbitraryRecordWithHeaders("input", "X-Bar" -> "bar"))
 
-      val unauthorized = consumeNumberStringMessagesFrom(microservice.unauthorizedTopic, 3)
+    val unauthorized = consumeNumberStringMessagesFrom("unauth", 3)
 
-      // assert no pending messages on authorized topic
-      a[TimeoutException] should be thrownBy {
-        consumeNumberMessagesFromTopics[String](Set(microservice.authorizedTopic), 1, timeout = 1.second)
-      }
-
-      unauthorized.size should equal(3)
-      await(control.drainAndShutdown()(microservice.system.dispatcher))
+    // assert no pending messages on authorized topic
+    a[TimeoutException] should be thrownBy {
+      consumeNumberMessagesFromTopics[String](Set("auth"), 1, timeout = 1.second)
     }
+
+    unauthorized.size should equal(3)
   }
 
   it should "direct messages according to passed AuthChecker" in {
-    withRunningKafka {
-      val microservice = new MessageAuthMicroservice(_ => { headers => headers.get("X-Must-Be-Even").exists(_.toInt % 2 == 0) })
-      val control = microservice.run
+    val microservice = messageAuthMicroservice(_ => { headers => headers.get("X-Must-Be-Even").exists(_.toInt % 2 == 0) })
+    microservice.outputTopics = Map("authorized" -> "auth", "unauthorized" -> "unauth")
+    import microservice.kafkaMocks._
 
-      val input = microservice.inputTopics.head
-      publishToKafka(arbitraryRecordWithHeaders(input, "X-Must-Be-Even" -> "0"))
-      publishToKafka(arbitraryRecordWithHeaders(input, "X-Must-Be-Even" -> "1"))
-      publishToKafka(arbitraryRecordWithHeaders(input, "X-Must-Be-Even" -> "2"))
+    publishToKafka(arbitraryRecordWithHeaders("input", "X-Must-Be-Even" -> "0"))
+    publishToKafka(arbitraryRecordWithHeaders("input", "X-Must-Be-Even" -> "1"))
+    publishToKafka(arbitraryRecordWithHeaders("input", "X-Must-Be-Even" -> "2"))
 
-      val authorized = consumeNumberStringMessagesFrom(microservice.authorizedTopic, 2)
-      val unauthorized = consumeNumberStringMessagesFrom(microservice.unauthorizedTopic, 1)
+    val authorized = consumeNumberStringMessagesFrom("auth", 2)
+    val unauthorized = consumeNumberStringMessagesFrom("unauth", 1)
 
-      authorized.size should equal (2)
-      unauthorized.size should equal (1)
-
-      await(control.drainAndShutdown()(microservice.system.dispatcher))
-    }
+    authorized.size should equal(2)
+    unauthorized.size should equal(1)
   }
+
+  private def messageAuthMicroservice(checkerFactory: NioMicroservice.Context => AuthCheckers.AuthChecker) =
+    NioMicroserviceMock(MessageAuthMicroservice(checkerFactory))
 
   private def arbitraryRecordWithHeaders(topic: String, headers: (String, String)*): ProducerRecord[String, Array[Byte]] =
     new ProducerRecord[String, Array[Byte]](topic, null, null, "key", "value".getBytes(UTF_8),
       (for {(k, v) <- headers} yield new RecordHeader(k, v.getBytes(UTF_8)): Header).toList.asJava
     )
-
-  def await[T](x: Awaitable[T]): T = Await.result(x, Duration.Inf)
-
-  override protected def beforeAll(): Unit = {
-    val _ = EmbeddedKafka.start()
-  }
-  override protected def afterAll(): Unit = {
-    val _ = EmbeddedKafka.stop()
-  }
-  def withRunningKafka[T](b: => T): T = b
 }

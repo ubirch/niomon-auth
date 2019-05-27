@@ -1,13 +1,13 @@
 package com.ubirch.messageauth
 
-import com.ubirch.niomon.base.NioMicroservice
+import com.ubirch.niomon.base.{NioMicroservice, NioMicroserviceLogic}
 import com.ubirch.kafka._
 import com.ubirch.messageauth.AuthCheckers.AuthChecker
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.producer.ProducerRecord
 
-class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => AuthChecker)
-  extends NioMicroservice[Array[Byte], Array[Byte]]("message-auth") {
+class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => AuthChecker, runtime: NioMicroservice[Array[Byte], Array[Byte]])
+  extends NioMicroserviceLogic[Array[Byte], Array[Byte]](runtime) {
   val checkAuth: AuthChecker = authCheckerFactory(context)
   val authorizedTopic: String = outputTopics("authorized")
   val unauthorizedTopic: String = outputTopics("unauthorized")
@@ -24,4 +24,10 @@ class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => Aut
       record.toProducerRecord(unauthorizedTopic).withExtraHeaders("http-status-code" -> "401")
     }
   }
+}
+
+object MessageAuthMicroservice {
+  def apply(authCheckerFactory: NioMicroservice.Context => AuthChecker)
+    (runtime: NioMicroservice[Array[Byte], Array[Byte]]): MessageAuthMicroservice =
+    new MessageAuthMicroservice(authCheckerFactory, runtime)
 }

@@ -11,8 +11,8 @@ import com.ubirch.niomon.base.NioMicroservice
 import scala.util.Try
 
 class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
-  val defaultCumulocityBaseUrl: String = context.config.getString("cumulocity.baseUrl")
-  val defaultCumulocityTenant: String = context.config.getString("cumulocity.tenant")
+  lazy val defaultCumulocityBaseUrl: String = context.config.getString("cumulocity.baseUrl")
+  lazy val defaultCumulocityTenant: String = context.config.getString("cumulocity.tenant")
 
   val alwaysAccept: Map[String, String] => Boolean = _ => true
 
