@@ -1,0 +1,32 @@
+{{- define "message-auth.env" -}}
+- name: C8Y_BASEURL
+  value: https://ubirch.cumulocity.com/
+- name: C8Y_TENANT
+  value: ubirch
+- name: KAFKA_TOPIC_IN
+  value: "binary.request"
+- name: KAFKA_TOPIC_OUT_AUTH
+  value: "binary.authorized"
+- name: KAFKA_TOPIC_OUT_UNAUTH
+  value: "niomon.error"
+- name: REDIS_MASTER_URL
+  value: "{{.Values.redis.masterURL}}"
+- name: REDIS_SLAVE_URL
+  value: "{{.Values.redis.slaveURL}}"
+- name: REDIS_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      key: redis-password
+      name: {{.Values.redisSecretName}}
+{{- end -}}
+
+{{- $deployment := (dict "envStr" (include "message-auth.env" .)) -}}
+
+{{- $_ := set $deployment "Root" . -}}
+{{- $_ := set $deployment "name" "message-auth" -}}
+
+{{ template "niomon.deployment" $deployment }}
+
+---
+
+{{ template "niomon.service" $deployment }}
