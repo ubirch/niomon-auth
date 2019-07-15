@@ -1,0 +1,6 @@
+/target
+/Dockerfile
+/*.iml
+/helm/auth/templates/_helpers.yaml
+/helm/auth/.helmignore
+/helm/auth/values.*.yaml

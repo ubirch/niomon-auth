@@ -21,7 +21,7 @@ class MessageAuthTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   implicit val stringDeserializer = new StringDeserializer
 
   // TODO: figure out what to do with redis in tests - run an embedded server?
-  val context = new NioMicroservice.Context(???, ConfigFactory.load().getConfig("message-auth"))
+  val context = new NioMicroservice.Context(???, ConfigFactory.load().getConfig("niomon-auth"))
 
   // ignored by default, because requires username and password to be passed in through env variables
   "checkCumulocity" should "authorize with basic auth passed in" ignore {
