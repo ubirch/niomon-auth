@@ -23,7 +23,7 @@
 {{- $deployment := (dict "envStr" (include "niomon-auth.env" .)) -}}
 
 {{- $_ := set $deployment "Root" . -}}
-{{- $_ := set $deployment "name" "niomon-auth" -}}
+{{- $_ := set $deployment "name" "auth" -}}
 
 {{ template "niomon.deployment" $deployment }}
 
