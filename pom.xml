@@ -40,11 +40,39 @@
 
     <name>auth [${project.version}]</name>
     <description>verifies signatures of incoming kafka messages</description>
+    <url>https://ubirch.com/</url>
 
     <organization>
         <name>ubirch GmbH</name>
         <url>https://ubirch.com/</url>
     </organization>
+
+    <developers>
+        <developer>
+            <name>Mikołaj Robakowski</name>
+            <email>mikolaj.robakowski@ubirch.com</email>
+            <organization>ubirch GmbH</organization>
+            <organizationUrl>https://ubirch.com/</organizationUrl>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git://github.com/ubirch/niomon-${project.artifactId}.git</connection>
+        <developerConnection>scm:git:git@github.com:ubirch/niomon-${project.artifactId}.git</developerConnection>
+        <url>https://github.com/ubirch/niomon-${project.artifactId}</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>ossrh</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+        </snapshotRepository>
+        <repository>
+            <id>ossrh</id>
+            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+        </repository>
+    </distributionManagement>
 
     <properties>
         <skinny-framework.version>3.0.1</skinny-framework.version>
@@ -119,6 +147,9 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-deploy-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -141,6 +172,16 @@
             <url>http://download.cumulocity.com/maven/repository</url>
         </repository>
 
+        <repository>
+            <id>snapshots-repo</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
     </repositories>
 
 </project>
