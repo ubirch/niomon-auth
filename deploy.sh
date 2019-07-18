@@ -4,7 +4,16 @@ set -e
 # this works as long as the executed script is not a symlink
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 cd ${DIR}
-cd ./target/deploy/
+
+if [[ -d ./target/deploy/ ]]; then
+  cd ./target/deploy/
+elif [[ -d /build/deploy/ ]]; then
+  cd /build/deploy/
+else
+  ls
+  echo "Could not find the deployment files"
+  exit 1
+fi
 
 ls
 
