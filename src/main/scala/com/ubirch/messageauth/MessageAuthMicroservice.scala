@@ -18,10 +18,10 @@ class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => Aut
     val authPassed = checkAuth(headers)
 
     if (authPassed) {
-      logger.info(s"request with key [${v("requestId", record.key())}] is authorized")
+      logger.info(s"request [${v("requestId", record.key())}] is authorized")
       record.toProducerRecord(authorizedTopic)
     } else {
-      logger.info(s"request with key [${v("requestId", record.key())}] is NOT authorized")
+      logger.info(s"request [${v("requestId", record.key())}] is NOT authorized")
       record.toProducerRecord(unauthorizedTopic).withExtraHeaders("http-status-code" -> "401")
     }
   }
