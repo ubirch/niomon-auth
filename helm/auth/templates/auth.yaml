@@ -4,11 +4,11 @@
 - name: C8Y_TENANT
   value: ubirch
 - name: KAFKA_TOPIC_IN
-  value: "binary.request"
+  value: "ubirch-niomon-req-bin"
 - name: KAFKA_TOPIC_OUT_AUTH
-  value: "binary.authorized"
+  value: "ubirch-niomon-req-authorized-bin"
 - name: KAFKA_TOPIC_OUT_UNAUTH
-  value: "niomon.error"
+  value: "ubirch-niomon-error-json"
 - name: REDIS_MASTER_URL
   value: "{{.Values.redis.masterURL}}"
 - name: REDIS_SLAVE_URL
@@ -24,6 +24,7 @@
 
 {{- $_ := set $deployment "Root" . -}}
 {{- $_ := set $deployment "name" "auth" -}}
+  {{- $_ := set $deployment "replicas" .Values.auth.replicas -}}
 
 {{ template "niomon.deployment" $deployment }}
 

@@ -24,6 +24,7 @@
         <groupId>com.ubirch.niomon</groupId>
         <artifactId>parent</artifactId>
         <version>1.0.1-SNAPSHOT</version>
+        <relativePath>../parent</relativePath>
     </parent>
 
     <artifactId>auth</artifactId>
