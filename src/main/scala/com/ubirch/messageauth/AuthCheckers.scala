@@ -68,14 +68,11 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     res
   }
 
-  implicit object CheckCumulocityOAuthKey extends NioMicroservice.CacheKey[(Map[String, String], CumulocityInfo)] {
-    override def key(headersAndInfo: (Map[String, String], CumulocityInfo)): String =
-      (headersAndInfo._1("X-XSRF-TOKEN"), headersAndInfo._1("Authorization"), headersAndInfo._1("Cookie"), headersAndInfo._2).toString()
-  }
-
   // we cache authentication iff it is successful!
   lazy val checkCumulocityOAuthCached: (Map[String, String], CumulocityInfo) => Boolean =
-    context.cached(checkCumulocityOAuth _).buildCache("cumulocity-oauth-cache", shouldCache = { isAuth => isAuth })
+    context.cached(checkCumulocityOAuth _).buildCache("cumulocity-oauth-cache", shouldCache = { isAuth => isAuth })(
+      hi => (hi._1("X-XSRF-TOKEN"), hi._1("Authorization"), hi._1("Cookie"), hi._2).toString()
+    )
 
   private val authorizationCookieRegex = "authorization=([^;]*)".r.unanchored
 
@@ -111,11 +108,16 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   def checkMulti(headers: Map[String, String]): Boolean = {
     headers.getOrElse("X-Ubirch-Auth-Type", "cumulocity") match {
       case "cumulocity" => checkCumulocity(headers)
-      case "keycloak" | "ubirch" => checkUbirch(headers)
+      case "keycloak" | "ubirch" => checkUbirchCached(headers)
     }
   }
 
   implicit val sttpBackend: SttpBackend[Id, Nothing] = HttpURLConnectionBackend()
+
+  lazy val checkUbirchCached: AuthChecker =
+    context.cached(checkUbirch _).buildCache("ubirch-auth-cache", shouldCache = { isAuth => isAuth })(
+      h => (h("X-Ubirch-Hardware-Id"), h("X-Ubirch-Credential")).toString()
+    )
 
   def checkUbirch(headers: Map[String, String]): Boolean = {
     // we receive password in base64, but the keycloak facade expects plain text
