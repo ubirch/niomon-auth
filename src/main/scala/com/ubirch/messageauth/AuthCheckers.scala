@@ -71,7 +71,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   // we cache authentication iff it is successful!
   lazy val checkCumulocityOAuthCached: (Map[String, String], CumulocityInfo) => Boolean =
     context.cached(checkCumulocityOAuth _).buildCache("cumulocity-oauth-cache", shouldCache = { isAuth => isAuth })(
-      hi => (hi._1("X-XSRF-TOKEN"), hi._1("Authorization"), hi._1("Cookie"), hi._2).toString()
+      hi => (hi._1.get("X-XSRF-TOKEN"), hi._1.get("Authorization"), hi._1.get("Cookie"), hi._2).toString()
     )
 
   private val authorizationCookieRegex = "authorization=([^;]*)".r.unanchored
@@ -116,10 +116,10 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
 
   lazy val checkUbirchCached: AuthChecker =
     context.cached(checkUbirch _).buildCache("ubirch-auth-cache", shouldCache = { isAuth => isAuth })(
-      h => (h("X-Ubirch-Hardware-Id"), h("X-Ubirch-Credential")).toString()
+      h => (h.get("X-Ubirch-Hardware-Id"), h.get("X-Ubirch-Credential")).toString()
     )
 
-  def checkUbirch(headers: Map[String, String]): Boolean = {
+  def checkUbirch(headers: Map[String, String]): Boolean = Try {
     // we receive password in base64, but the keycloak facade expects plain text
     val decodedPassword = new String(Base64.getDecoder.decode(headers("X-Ubirch-Credential")), StandardCharsets.UTF_8)
 
@@ -129,7 +129,10 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
       .send()
 
     response.isSuccess
-  }
+  }.fold({ error =>
+    logger.error("error while authenticating", error)
+    false
+  }, identity)
 
   def get: PartialFunction[String, AuthChecker] = {
     case "alwaysAccept" => alwaysAccept
