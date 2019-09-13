@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 
 import com.cumulocity.sdk.client.{PlatformBuilder, SDKException}
+import com.softwaremill.sttp._
 import com.typesafe.scalalogging.StrictLogging
 import com.ubirch.messageauth.AuthCheckers.AuthChecker
 import com.ubirch.niomon.base.NioMicroservice
@@ -107,9 +108,31 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     res
   }
 
+  def checkMulti(headers: Map[String, String]): Boolean = {
+    headers.getOrElse("X-Ubirch-Auth-Type", "cumulocity") match {
+      case "cumulocity" => checkCumulocity(headers)
+      case "keycloak" | "ubirch" => checkUbirch(headers)
+    }
+  }
+
+  implicit val sttpBackend: SttpBackend[Id, Nothing] = HttpURLConnectionBackend()
+
+  def checkUbirch(headers: Map[String, String]): Boolean = {
+    // we receive password in base64, but the keycloak facade expects plain text
+    val decodedPassword = new String(Base64.getDecoder.decode(headers("X-Ubirch-Credential")), StandardCharsets.UTF_8)
+
+    val response = sttp.get(Uri.parse(context.config.getString("ubirch.authUrl")).get)
+      .header("X-Ubirch-Hardware-Id", headers("X-Ubirch-Hardware-Id"))
+      .header("X-Ubirch-Credential", decodedPassword)
+      .send()
+
+    response.isSuccess
+  }
+
   def get: PartialFunction[String, AuthChecker] = {
     case "alwaysAccept" => alwaysAccept
     case "checkCumulocity" => checkCumulocity
+    case "checkMulti" => checkMulti
   }
 
   def getDefault: AuthChecker = get(context.config.getString("checkingStrategy"))
