@@ -6,18 +6,19 @@ import java.util.Base64
 import com.cumulocity.sdk.client.{PlatformBuilder, SDKException}
 import com.softwaremill.sttp._
 import com.typesafe.scalalogging.StrictLogging
-import com.ubirch.messageauth.AuthCheckers.AuthChecker
+import com.ubirch.messageauth.AuthCheckers.{AuthChecker, CheckResult}
 import com.ubirch.niomon.base.NioMicroservice
 
+import scala.language.implicitConversions
 import scala.util.Try
 
 class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   lazy val defaultCumulocityBaseUrl: String = context.config.getString("cumulocity.baseUrl")
   lazy val defaultCumulocityTenant: String = context.config.getString("cumulocity.tenant")
 
-  val alwaysAccept: Map[String, String] => Boolean = _ => true
+  val alwaysAccept: AuthChecker = _ => true
 
-  val alwaysReject: Map[String, String] => Boolean = _ => false
+  val alwaysReject: AuthChecker = _ => false
 
   def checkCumulocity(headers: Map[String, String]): Boolean = {
     val cumulocityInfo = getCumulocityInfo(headers)
@@ -105,7 +106,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     res
   }
 
-  def checkMulti(headers: Map[String, String]): Boolean = {
+  def checkMulti(headers: Map[String, String]): CheckResult = {
     headers.getOrElse("X-Ubirch-Auth-Type", "cumulocity") match {
       case "cumulocity" => checkCumulocity(headers)
       case "keycloak" | "ubirch" => checkUbirchCached(headers)
@@ -115,11 +116,11 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   implicit val sttpBackend: SttpBackend[Id, Nothing] = HttpURLConnectionBackend()
 
   lazy val checkUbirchCached: AuthChecker =
-    context.cached(checkUbirch _).buildCache("ubirch-auth-cache", shouldCache = { isAuth => isAuth })(
+    context.cached(checkUbirch _).buildCache("ubirch-auth-cache", shouldCache = { cr => cr.isAuthPassed })(
       h => (h.get("X-Ubirch-Hardware-Id"), h.get("X-Ubirch-Credential")).toString()
     )
 
-  def checkUbirch(headers: Map[String, String]): Boolean = Try {
+  def checkUbirch(headers: Map[String, String]): CheckResult = Try {
     // we receive password in base64, but the keycloak facade expects plain text
     val decodedPassword = new String(Base64.getDecoder.decode(headers("X-Ubirch-Credential")), StandardCharsets.UTF_8)
 
@@ -128,7 +129,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
       .header("X-Ubirch-Credential", decodedPassword)
       .send()
 
-    response.isSuccess
+    CheckResult(response.isSuccess, Map("X-Ubirch-DeviceInfo-Token" -> response.body.right.get))
   }.fold({ error =>
     logger.error("error while authenticating", error)
     false
@@ -144,5 +145,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
 }
 
 object AuthCheckers {
-  type AuthChecker = Map[String, String] => Boolean
+  case class CheckResult(isAuthPassed: Boolean, headersToAdd: Map[String, String] = Map())
+  implicit def boolToCheckResult(isAuthPassed: Boolean): CheckResult = CheckResult(isAuthPassed)
+  type AuthChecker = Map[String, String] => CheckResult
 }
