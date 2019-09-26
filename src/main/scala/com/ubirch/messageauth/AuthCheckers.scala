@@ -69,11 +69,17 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     res
   }
 
-  // we cache authentication iff it is successful!
+  // we cache authentication if it is successful!
   lazy val checkCumulocityOAuthCached: (Map[String, String], CumulocityInfo) => Boolean =
-    context.cached(checkCumulocityOAuth _).buildCache("cumulocity-oauth-cache", shouldCache = { isAuth => isAuth })(
-      hi => (hi._1.get("X-XSRF-TOKEN"), hi._1.get("Authorization"), hi._1.get("Cookie"), hi._2).toString()
-    )
+    context.cached(checkCumulocityOAuth _)
+      .buildCache("cumulocity-oauth-cache", shouldCache = { isAuth => isAuth })(
+        hi => (
+          hi._1.get("X-XSRF-TOKEN"),
+          hi._1.get("Authorization"),
+          hi._1.get("Cookie"),
+          hi._2
+          ).toString()
+      )
 
   private val authorizationCookieRegex = "authorization=([^;]*)".r.unanchored
 
@@ -107,9 +113,13 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   }
 
   def checkMulti(headers: Map[String, String]): CheckResult = {
-    headers.getOrElse("X-Ubirch-Auth-Type", "cumulocity") match {
-      case "cumulocity" => checkCumulocity(headers)
-      case "keycloak" | "ubirch" => checkUbirchCached(headers)
+    headers.getOrElse("X-Ubirch-Auth-Type", "ubirch") match {
+      case "cumulocity" =>
+        logger.debug("checkMulti: cumulocity")
+        checkCumulocity(headers)
+      case "keycloak" | "ubirch" =>
+        logger.debug("checkMulti: keycloak/ubirch")
+        checkUbirchCached(headers)
     }
   }
 
@@ -145,7 +155,10 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
 }
 
 object AuthCheckers {
+
   case class CheckResult(isAuthPassed: Boolean, headersToAdd: Map[String, String] = Map())
+
   implicit def boolToCheckResult(isAuthPassed: Boolean): CheckResult = CheckResult(isAuthPassed)
+
   type AuthChecker = Map[String, String] => CheckResult
 }
