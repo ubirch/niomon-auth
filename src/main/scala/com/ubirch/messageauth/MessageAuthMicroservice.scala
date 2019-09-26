@@ -1,7 +1,7 @@
 package com.ubirch.messageauth
 
 import com.ubirch.kafka._
-import com.ubirch.messageauth.AuthCheckers.AuthChecker
+import com.ubirch.messageauth.AuthCheckers.{AuthChecker, CheckResult}
 import com.ubirch.niomon.base.{NioMicroservice, NioMicroserviceLogic}
 import net.logstash.logback.argument.StructuredArguments.v
 import org.apache.kafka.clients.consumer.ConsumerRecord
@@ -15,11 +15,11 @@ class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => Aut
 
   override def processRecord(record: ConsumerRecord[String, Array[Byte]]): ProducerRecord[String, Array[Byte]] = {
     val headers = record.headersScala
-    val authPassed = checkAuth(headers)
+    val CheckResult(authPassed, headersToAdd) = checkAuth(headers)
 
     if (authPassed) {
       logger.info(s"request [${v("requestId", record.key())}] is authorized")
-      record.toProducerRecord(authorizedTopic)
+      record.toProducerRecord(authorizedTopic).withExtraHeaders(headersToAdd.toSeq: _*)
     } else {
       logger.info(s"request [${v("requestId", record.key())}] is NOT authorized")
       record.toProducerRecord(unauthorizedTopic).withExtraHeaders("http-status-code" -> "401")

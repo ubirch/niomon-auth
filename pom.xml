@@ -110,6 +110,13 @@
             <version>1.0.1-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- http client -->
+        <dependency>
+            <groupId>com.softwaremill.sttp</groupId>
+            <artifactId>core_${scala.major.version}</artifactId>
+            <version>1.6.6</version>
+        </dependency>
     </dependencies>
 
     <build>
