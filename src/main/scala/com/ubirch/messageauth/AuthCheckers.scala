@@ -134,11 +134,12 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     // we receive password in base64, but the keycloak facade expects plain text
     val currentHeader = headers.seq.keys.toList.mkString(", ")
     logger.debug(s"checkUbirch: received headers= $currentHeader")
-    val decodedPassword = new String(Base64.getDecoder.decode(headers("X-Ubirch-Credential")), StandardCharsets.UTF_8)
+
+    val passwordB64 = headers("X-Ubirch-Credential")
 
     val response = sttp.get(Uri.parse(context.config.getString("ubirch.authUrl")).get)
       .header("X-Ubirch-Hardware-Id", headers("X-Ubirch-Hardware-Id"))
-      .header("X-Ubirch-Credential", decodedPassword)
+      .header("X-Ubirch-Credential", passwordB64)
       .send()
 
     CheckResult(response.isSuccess, Map("X-Ubirch-DeviceInfo-Token" -> response.body.right.get))
