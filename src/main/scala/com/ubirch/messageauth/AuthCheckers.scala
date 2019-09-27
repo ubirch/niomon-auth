@@ -113,7 +113,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   }
 
   def checkMulti(headers: Map[String, String]): CheckResult = {
-    headers.getOrElse("X-Ubirch-Auth-Type", "ubirch") match {
+    headers.getOrElse("X-Ubirch-Auth-Type", "cumulocity") match {
       case "cumulocity" =>
         logger.debug("checkMulti: cumulocity")
         checkCumulocity(headers)
