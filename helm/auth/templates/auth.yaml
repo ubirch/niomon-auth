@@ -20,6 +20,8 @@
     secretKeyRef:
       key: redis-password
       name: {{.Values.redisSecretName}}
+- name: UBIRCH_AUTH_URL
+  value: "{{.Values.auth.ubirchAuthUrl}}"
 {{- end -}}
 
 {{- $deployment := (dict "envStr" (include "niomon-auth.env" .)) -}}
