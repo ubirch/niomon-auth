@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env bash -x
 set -e
 
 # this works as long as the executed script is not a symlink
