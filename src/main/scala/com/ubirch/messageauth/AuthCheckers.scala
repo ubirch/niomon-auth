@@ -9,6 +9,7 @@ import com.typesafe.scalalogging.StrictLogging
 import com.ubirch.messageauth.AuthCheckers.{AuthChecker, CheckResult}
 import com.ubirch.niomon.base.NioMicroservice
 
+import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.util.Try
 
@@ -123,7 +124,9 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     }
   }
 
-  implicit val sttpBackend: SttpBackend[Id, Nothing] = HttpURLConnectionBackend()
+  implicit val sttpBackend: SttpBackend[Id, Nothing] = HttpURLConnectionBackend(
+    options = SttpBackendOptions.connectionTimeout(10.seconds)
+  )
 
   lazy val checkUbirchCached: AuthChecker =
     context.cached(checkUbirch _).buildCache("ubirch-auth-cache", shouldCache = { cr => cr.isAuthPassed })(
@@ -140,6 +143,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     val response = sttp.get(Uri.parse(context.config.getString("ubirch.authUrl")).get)
       .header("X-Ubirch-Hardware-Id", headers("X-Ubirch-Hardware-Id"))
       .header("X-Ubirch-Credential", passwordB64)
+      .readTimeout(10.seconds)
       .send()
 
     CheckResult(response.isSuccess, Map("X-Ubirch-DeviceInfo-Token" -> response.body.right.get))
