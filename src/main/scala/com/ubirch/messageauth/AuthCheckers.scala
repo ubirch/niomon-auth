@@ -124,32 +124,45 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     }
   }
 
-  implicit val sttpBackend: SttpBackend[Id, Nothing] = HttpURLConnectionBackend(
+  implicit val sttpBackend: EitherBackend[Nothing] = new EitherBackend[Nothing](HttpURLConnectionBackend(
     options = SttpBackendOptions.connectionTimeout(10.seconds)
-  )
+  ))
 
   lazy val checkUbirchCached: AuthChecker =
     context.cached(checkUbirch _).buildCache("ubirch-auth-cache", shouldCache = { cr => cr.isAuthPassed })(
       h => (h.get("X-Ubirch-Hardware-Id"), h.get("X-Ubirch-Credential")).toString()
     )
 
-  def checkUbirch(headers: Map[String, String]): CheckResult = Try {
-    // we receive password in base64, but the keycloak facade expects plain text
-    val currentHeader = headers.seq.keys.toList.mkString(", ")
-    logger.debug(s"checkUbirch: received headers= $currentHeader")
+  def checkUbirch(headers: Map[String, String]): CheckResult = (for {
+    _ <- Right(()) // for some reason for expressions have to start with a `<-` binding
 
-    val passwordB64 = headers("X-Ubirch-Credential")
+    currentHeader = headers.seq.keys.toList.mkString(", ")
+    _ = logger.debug(s"checkUbirch: received headers = $currentHeader")
 
-    val response = sttp.get(Uri.parse(context.config.getString("ubirch.authUrl")).get)
-      .header("X-Ubirch-Hardware-Id", headers("X-Ubirch-Hardware-Id"))
-      .header("X-Ubirch-Credential", passwordB64)
+    rawUrl <- Try(context.config.getString("ubirch.authUrl")).toEither
+    uri <- Uri.parse(rawUrl).toEither
+      .left.map(cause => new IllegalArgumentException(s"could not parse ubirch.authUrl = [$rawUrl]", cause))
+
+    hardwareId <- headers.get("X-Ubirch-Hardware-Id")
+      .toRight(new NoSuchElementException("missing X-Ubirch-Hardware-Id header"))
+
+    ubirchCredential <- headers.get("X-Ubirch-Credential")
+      .toRight(new NoSuchElementException("missing X-Ubirch-Credential header"))
+
+    deviceInfoTokenResponse <- sttp.get(uri)
+      .header("X-Ubirch-Hardware-Id", hardwareId)
+      .header("X-Ubirch-Credential", ubirchCredential)
       .readTimeout(10.seconds)
       .send()
 
-    CheckResult(response.isSuccess, Map("X-Ubirch-DeviceInfo-Token" -> response.body.right.get))
-  }.fold({ error =>
+    deviceInfoToken <- deviceInfoTokenResponse.body.left.map(errBody => new IllegalArgumentException(
+      s"response from $rawUrl was not successful; status code = ${deviceInfoTokenResponse.code}; body = [$errBody]"
+    ))
+
+    successfulResult = CheckResult(isAuthPassed = true, headersToAdd = Map("X-Ubirch-DeviceInfo-Token" -> deviceInfoToken))
+  } yield successfulResult).fold({ error =>
     logger.error("error while authenticating", error)
-    false
+    CheckResult(isAuthPassed = false)
   }, identity)
 
   def get: PartialFunction[String, AuthChecker] = {
