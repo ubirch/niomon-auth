@@ -10,18 +10,17 @@ import com.ubirch.messageauth.AuthCheckers.{AuthChecker, CheckResult}
 import com.ubirch.niomon.base.NioMicroservice
 
 import scala.concurrent.duration._
-import scala.language.implicitConversions
 import scala.util.Try
 
 class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   lazy val defaultCumulocityBaseUrl: String = context.config.getString("cumulocity.baseUrl")
   lazy val defaultCumulocityTenant: String = context.config.getString("cumulocity.tenant")
 
-  val alwaysAccept: AuthChecker = _ => true
+  val alwaysAccept: AuthChecker = _ => AuthCheckers.boolToArbitraryRejectionCheckResult(true)
 
-  val alwaysReject: AuthChecker = _ => false
+  val alwaysReject: AuthChecker = _ => AuthCheckers.boolToArbitraryRejectionCheckResult(false)
 
-  def checkCumulocity(headers: Map[String, String]): Boolean = {
+  def checkCumulocity(headers: Map[String, String]): CheckResult = {
     val cumulocityInfo = getCumulocityInfo(headers)
     headers.get("Authorization") match {
       case Some(auth) if auth.startsWith("Basic ") => checkCumulocityBasicCached(auth, cumulocityInfo)
@@ -37,10 +36,10 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   }
 
   // we cache authentication iff it is successful!
-  lazy val checkCumulocityBasicCached: (String, CumulocityInfo) => Boolean =
-    context.cached(checkCumulocityBasic _).buildCache(name = "cumulocity-basic-auth-cache", shouldCache = { isAuth => isAuth })
+  lazy val checkCumulocityBasicCached: (String, CumulocityInfo) => CheckResult =
+    context.cached(checkCumulocityBasic _).buildCache(name = "cumulocity-basic-auth-cache", shouldCache = { x => x.isAuthPassed })
 
-  def checkCumulocityBasic(basicAuth: String, cumulocityInfo: CumulocityInfo): Boolean = {
+  def checkCumulocityBasic(basicAuth: String, cumulocityInfo: CumulocityInfo): CheckResult = {
     logger.debug("doing basic authentication")
 
     val basicAuthDecoded = new String(Base64.getDecoder.decode(basicAuth.stripPrefix("Basic ")), StandardCharsets.UTF_8)
@@ -53,9 +52,9 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
       .withPassword(password)
       .build()
 
-    val rawRes = Try(cumulocity.getInventoryApi)
+    val res = Try(cumulocity.getInventoryApi)
 
-    rawRes.failed.foreach {
+    res.failed.foreach {
       case e: SDKException =>
         if (e.getHttpStatus != 401) {
           logger.error(s"Cumulocity error", e)
@@ -63,17 +62,15 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
       case _ =>
     }
 
-    val res = rawRes.isSuccess // cumulocity api throws exception if unauthorized
-
     cumulocity.close()
 
-    res
+    CheckResult(rejectionReason = res.failed.toOption)
   }
 
   // we cache authentication if it is successful!
-  lazy val checkCumulocityOAuthCached: (Map[String, String], CumulocityInfo) => Boolean =
+  lazy val checkCumulocityOAuthCached: (Map[String, String], CumulocityInfo) => CheckResult =
     context.cached(checkCumulocityOAuth _)
-      .buildCache("cumulocity-oauth-cache", shouldCache = { isAuth => isAuth })(
+      .buildCache("cumulocity-oauth-cache", shouldCache = { x => x.isAuthPassed })(
         hi => (
           hi._1.get("X-XSRF-TOKEN"),
           hi._1.get("Authorization"),
@@ -84,7 +81,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
 
   private val authorizationCookieRegex = "authorization=([^;]*)".r.unanchored
 
-  def checkCumulocityOAuth(headers: Map[String, String], cumulocityInfo: CumulocityInfo): Boolean = {
+  def checkCumulocityOAuth(headers: Map[String, String], cumulocityInfo: CumulocityInfo): CheckResult = {
     logger.debug("doing OAuth authentication")
     logger.warn("OAuth authentication is unsupported at `ubirch` tenant")
 
@@ -106,11 +103,11 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
       .withXsrfToken(xsrfToken.orNull)
       .build()
 
-    val res = Try(cumulocity.getInventoryApi).isSuccess // cumulocity api throws exception if unauthorized
+    val res = Try(cumulocity.getInventoryApi)
 
     cumulocity.close()
 
-    res
+    CheckResult(rejectionReason = res.failed.toOption)
   }
 
   def checkMulti(headers: Map[String, String]): CheckResult = {
@@ -154,15 +151,16 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
       .header("X-Ubirch-Credential", ubirchCredential)
       .readTimeout(10.seconds)
       .send()
+      .left.map(new RuntimeException(s"request to $rawUrl was not successful", _))
 
     deviceInfoToken <- deviceInfoTokenResponse.body.left.map(errBody => new IllegalArgumentException(
       s"response from $rawUrl was not successful; status code = ${deviceInfoTokenResponse.code}; body = [$errBody]"
     ))
 
-    successfulResult = CheckResult(isAuthPassed = true, headersToAdd = Map("X-Ubirch-DeviceInfo-Token" -> deviceInfoToken))
+    successfulResult = CheckResult(rejectionReason = None, headersToAdd = Map("X-Ubirch-DeviceInfo-Token" -> deviceInfoToken))
   } yield successfulResult).fold({ error =>
     logger.error("error while authenticating", error)
-    CheckResult(isAuthPassed = false)
+    CheckResult(rejectionReason = Some(error))
   }, identity)
 
   def get: PartialFunction[String, AuthChecker] = {
@@ -175,10 +173,12 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
 }
 
 object AuthCheckers {
+  case class CheckResult(rejectionReason: Option[Throwable], headersToAdd: Map[String, String] = Map()) {
+    def isAuthPassed: Boolean = rejectionReason.isEmpty
+  }
 
-  case class CheckResult(isAuthPassed: Boolean, headersToAdd: Map[String, String] = Map())
-
-  implicit def boolToCheckResult(isAuthPassed: Boolean): CheckResult = CheckResult(isAuthPassed)
+  def boolToArbitraryRejectionCheckResult(isAuthPassed: Boolean): CheckResult =
+    CheckResult(rejectionReason = if (isAuthPassed) None else Some(new Exception("arbitrary rejection")))
 
   type AuthChecker = Map[String, String] => CheckResult
 }
