@@ -4,11 +4,14 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Base64
 
 import com.typesafe.config.ConfigFactory
+import com.ubirch.messageauth.AuthCheckers.CheckResult
 import com.ubirch.niomon.base.{NioMicroservice, NioMicroserviceMock}
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.header.Header
 import org.apache.kafka.common.header.internals.RecordHeader
 import org.apache.kafka.common.serialization.{ByteArraySerializer, StringDeserializer}
+import org.nustaq.serialization.FSTConfiguration
+import org.redisson.codec.FstCodec
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.collection.JavaConverters._
@@ -29,7 +32,7 @@ class MessageAuthTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val password = System.getenv("TEST_PASSWORD")
     val basicAuth = s"Basic ${Base64.getEncoder.encodeToString(s"$username:$password".getBytes(UTF_8))}"
 
-    new AuthCheckers(context).checkCumulocity(Map("Authorization" -> basicAuth)) should equal(true)
+    new AuthCheckers(context).checkCumulocity(Map("Authorization" -> basicAuth)).isAuthPassed should equal (true)
   }
 
   // our cumulocity tenant doesn't yet support logging in through OAuth, so this is disabled
@@ -38,7 +41,46 @@ class MessageAuthTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     val xsrfToken = System.getenv("TEST_XSRF_TOKEN")
     val headers = Map("X-XSRF-TOKEN" -> xsrfToken, "Cookie" -> s"authorization=$oauthToken")
 
-    new AuthCheckers(context).checkCumulocity(headers) should equal(true)
+    new AuthCheckers(context).checkCumulocity(headers).isAuthPassed should equal (true)
+  }
+
+  // ignored by default, because it does an external request
+  "checkUbirch" should "authorize with device id and password passed in" ignore {
+    val deviceId = "55424952-3c71-bf80-26dc-3c71bf8026dc"
+    val password = "MDAwMjY5MmItNGRkYy00MDAzLWJhNjEtNTQ0ZDViODRjZTlm"
+
+    val res = new AuthCheckers(context).checkUbirch(Map(
+      "X-Ubirch-Hardware-Id" -> deviceId,
+      "X-Ubirch-Credential" -> password
+    ))
+
+    res.isAuthPassed should equal (true)
+    res.headersToAdd should have size (1)
+    res.headersToAdd.keys should contain ("X-Ubirch-DeviceInfo-Token")
+  }
+
+  it should "fail when device id is missing" in {
+    val password = "MDAwMjY5MmItNGRkYy00MDAzLWJhNjEtNTQ0ZDViODRjZTlm"
+
+    val res = new AuthCheckers(context).checkUbirch(Map(
+      "X-Ubirch-Credential" -> password
+    ))
+
+    res.isAuthPassed should equal (false)
+    res.headersToAdd should have size (0)
+    res.rejectionReason.get.getMessage should include ("X-Ubirch-Hardware-Id")
+  }
+
+  it should "fail when password is missing" in {
+    val deviceId = "55424952-3c71-bf80-26dc-3c71bf8026dc"
+
+    val res = new AuthCheckers(context).checkUbirch(Map(
+      "X-Ubirch-Hardware-Id" -> deviceId
+    ))
+
+    res.isAuthPassed should equal (false)
+    res.headersToAdd should have size (0)
+    res.rejectionReason.get.getMessage should include ("X-Ubirch-Credential")
   }
 
   "authFlow" should "direct messages to authorized topic if authorized" in {
@@ -80,7 +122,9 @@ class MessageAuthTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   it should "direct messages according to passed AuthChecker" in {
-    val microservice = messageAuthMicroservice(_ => { headers => headers.get("X-Must-Be-Even").exists(_.toInt % 2 == 0) })
+    val microservice = messageAuthMicroservice(_ => { headers =>
+      AuthCheckers.boolToArbitraryRejectionCheckResult(headers.get("X-Must-Be-Even").exists(_.toInt % 2 == 0))
+    })
     microservice.outputTopics = Map("authorized" -> "auth", "unauthorized" -> "unauth")
     import microservice.kafkaMocks._
 
@@ -93,6 +137,24 @@ class MessageAuthTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
     authorized.size should equal(2)
     unauthorized.size should equal(1)
+  }
+
+  "CheckResult" should "be serializable and deserializable by the serializer we use in redisson" in {
+    val codec = new FstCodec(FSTConfiguration.createDefaultConfiguration().setForceSerializable(true))
+    val passedCheck = AuthCheckers.boolToArbitraryRejectionCheckResult(true)
+    val failedCheck = AuthCheckers.boolToArbitraryRejectionCheckResult(false)
+
+    val passedEncoded = codec.getValueEncoder.encode(passedCheck)
+    val failedEncoded = codec.getValueEncoder.encode(failedCheck)
+
+    val passedDecoded = codec.getValueDecoder.decode(passedEncoded, null).asInstanceOf[CheckResult]
+    val failedDecoded = codec.getValueDecoder.decode(failedEncoded, null).asInstanceOf[CheckResult]
+
+    passedDecoded should equal (passedCheck)
+//    failedDecoded should equal (failedCheck) // exceptions don't do equals well
+    failedDecoded.isAuthPassed should equal (false)
+    failedDecoded.headersToAdd should equal (Map())
+    failedDecoded.rejectionReason.get.getMessage should equal ("arbitrary rejection")
   }
 
   private def messageAuthMicroservice(checkerFactory: NioMicroservice.Context => AuthCheckers.AuthChecker) =

@@ -15,14 +15,15 @@ class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => Aut
 
   override def processRecord(record: ConsumerRecord[String, Array[Byte]]): ProducerRecord[String, Array[Byte]] = {
     val headers = record.headersScala
-    val CheckResult(authPassed, headersToAdd) = checkAuth(headers)
+    val CheckResult(rejectionReason, headersToAdd) = checkAuth(headers)
 
-    if (authPassed) {
-      logger.info(s"request [${v("requestId", record.key())}] is authorized")
-      record.toProducerRecord(authorizedTopic).withExtraHeaders(headersToAdd.toSeq: _*)
-    } else {
-      logger.info(s"request [${v("requestId", record.key())}] is NOT authorized")
-      record.toProducerRecord(unauthorizedTopic).withExtraHeaders("http-status-code" -> "401")
+    rejectionReason match {
+      case None =>
+        logger.info(s"request [${v("requestId", record.key())}] is authorized")
+        record.toProducerRecord(authorizedTopic).withExtraHeaders(headersToAdd.toSeq: _*)
+      case Some(reason) =>
+        logger.info(s"request [${v("requestId", record.key())}] is NOT authorized; reason: ${reason.getMessage}")
+        record.toProducerRecord(unauthorizedTopic).withExtraHeaders("http-status-code" -> "401")
     }
   }
 }
