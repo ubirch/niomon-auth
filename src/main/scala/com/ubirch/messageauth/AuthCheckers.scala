@@ -12,6 +12,7 @@ import com.ubirch.niomon.base.NioMicroservice
 import scala.concurrent.duration._
 import scala.util.Try
 
+/** Collection of different auth checks */
 class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   lazy val defaultCumulocityBaseUrl: String = context.config.getString("cumulocity.baseUrl")
   lazy val defaultCumulocityTenant: String = context.config.getString("cumulocity.tenant")
