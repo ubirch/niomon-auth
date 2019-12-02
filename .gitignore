@@ -1,5 +1,4 @@
 /target
-/Dockerfile
 /*.iml
 /helm/auth/templates/_helpers.yaml
 /helm/auth/.helmignore
