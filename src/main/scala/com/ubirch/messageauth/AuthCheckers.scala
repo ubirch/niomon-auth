@@ -23,7 +23,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
 
   def checkCumulocity(headers: Map[String, String]): CheckResult = {
     val cumulocityInfo = getCumulocityInfo(headers)
-    headers.get("Authorization") match {
+    headers.get(HeaderKeys.AUTHORIZATION) match {
       case Some(auth) if auth.startsWith("Basic ") => checkCumulocityBasicCached(auth, cumulocityInfo)
       case None => checkCumulocityOAuthCached(headers, cumulocityInfo)
     }
@@ -32,8 +32,8 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   case class CumulocityInfo(baseUrl: String, tenant: String)
 
   def getCumulocityInfo(headers: Map[String, String]): CumulocityInfo = {
-    CumulocityInfo(headers.getOrElse("X-Cumulocity-BaseUrl", defaultCumulocityBaseUrl),
-      headers.getOrElse("X-Cumulocity-Tenant", defaultCumulocityTenant))
+    CumulocityInfo(headers.getOrElse(HeaderKeys.XCUMULOCITYBASEURL, defaultCumulocityBaseUrl),
+      headers.getOrElse(HeaderKeys.XCUMULOCITYTENANT, defaultCumulocityTenant))
   }
 
   // we cache authentication iff it is successful!
@@ -73,9 +73,9 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     context.cached(checkCumulocityOAuth _)
       .buildCache("cumulocity-oauth-cache", shouldCache = { x => x.isAuthPassed })(
         hi => (
-          hi._1.get("X-XSRF-TOKEN"),
-          hi._1.get("Authorization"),
-          hi._1.get("Cookie"),
+          hi._1.get(HeaderKeys.XXSRFTOKEN),
+          hi._1.get(HeaderKeys.AUTHORIZATION),
+          hi._1.get(HeaderKeys.COOKIE),
           hi._2
           ).toString()
       )
@@ -86,9 +86,9 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     logger.debug("doing OAuth authentication")
     logger.warn("OAuth authentication is unsupported at `ubirch` tenant")
 
-    val xsrfToken = headers.get("X-XSRF-TOKEN")
-    val authorizationHeader = headers.get("Authorization")
-    val authorizationCookie = headers.get("Cookie").flatMap { cookiesStr =>
+    val xsrfToken = headers.get(HeaderKeys.XXSRFTOKEN)
+    val authorizationHeader = headers.get(HeaderKeys.AUTHORIZATION)
+    val authorizationCookie = headers.get(HeaderKeys.COOKIE).flatMap { cookiesStr =>
       cookiesStr match {
         case authorizationCookieRegex(authCookie) => Some(authCookie)
         case _ => None
@@ -112,7 +112,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   }
 
   def checkMulti(headers: Map[String, String]): CheckResult = {
-    headers.getOrElse("X-Ubirch-Auth-Type", "cumulocity") match {
+    headers.getOrElse(HeaderKeys.XUBIRCHAUTHTYPE, "cumulocity") match {
       case "cumulocity" =>
         logger.debug("checkMulti: cumulocity")
         checkCumulocity(headers)
@@ -128,7 +128,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
 
   lazy val checkUbirchCached: AuthChecker =
     context.cached(checkUbirch _).buildCache("ubirch-auth-cache", shouldCache = { cr => cr.isAuthPassed })(
-      h => (h.get("X-Ubirch-Hardware-Id"), h.get("X-Ubirch-Credential")).toString()
+      h => (h.get(HeaderKeys.XUBIRCHHARDWAREID), h.get(HeaderKeys.XUBIRCHCREDENTIAL)).toString()
     )
 
   def checkUbirch(headers: Map[String, String]): CheckResult = (for {
@@ -141,15 +141,15 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     uri <- Uri.parse(rawUrl).toEither
       .left.map(cause => new IllegalArgumentException(s"could not parse ubirch.authUrl = [$rawUrl]", cause))
 
-    hardwareId <- headers.get("X-Ubirch-Hardware-Id")
+    hardwareId <- headers.get(HeaderKeys.XUBIRCHHARDWAREID)
       .toRight(new NoSuchElementException("missing X-Ubirch-Hardware-Id header"))
 
-    ubirchCredential <- headers.get("X-Ubirch-Credential")
+    ubirchCredential <- headers.get(HeaderKeys.XUBIRCHCREDENTIAL)
       .toRight(new NoSuchElementException("missing X-Ubirch-Credential header"))
 
     deviceInfoTokenResponse <- sttp.get(uri)
-      .header("X-Ubirch-Hardware-Id", hardwareId)
-      .header("X-Ubirch-Credential", ubirchCredential)
+      .header(HeaderKeys.XUBIRCHHARDWAREID, hardwareId)
+      .header(HeaderKeys.XUBIRCHCREDENTIAL, ubirchCredential)
       .readTimeout(10.seconds)
       .send()
       .left.map(new RuntimeException(s"request to $rawUrl was not successful", _))
@@ -158,7 +158,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
       s"response from $rawUrl was not successful; status code = ${deviceInfoTokenResponse.code}; body = [$errBody]"
     ))
 
-    successfulResult = CheckResult(rejectionReason = None, headersToAdd = Map("X-Ubirch-DeviceInfo-Token" -> deviceInfoToken))
+    successfulResult = CheckResult(rejectionReason = None, headersToAdd = Map(HeaderKeys.XUBIRCHDEVICEINFOTOKEN -> deviceInfoToken))
   } yield successfulResult).fold({ error =>
     logger.error("error while authenticating", error)
     CheckResult(rejectionReason = Some(error))
