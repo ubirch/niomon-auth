@@ -14,7 +14,10 @@ class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => Aut
   val unauthorizedTopic: String = outputTopics("unauthorized")
 
   override def processRecord(record: ConsumerRecord[String, Array[Byte]]): ProducerRecord[String, Array[Byte]] = {
-    val headers = record.headersScala
+    val headers = record.headersScala.map { h =>
+      h._1.toLowerCase -> h._2
+    }
+
     val CheckResult(rejectionReason, headersToAdd) = checkAuth(headers)
 
     rejectionReason match {
@@ -31,6 +34,6 @@ class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => Aut
 
 object MessageAuthMicroservice {
   def apply(authCheckerFactory: NioMicroservice.Context => AuthChecker)
-    (runtime: NioMicroservice[Array[Byte], Array[Byte]]): MessageAuthMicroservice =
+           (runtime: NioMicroservice[Array[Byte], Array[Byte]]): MessageAuthMicroservice =
     new MessageAuthMicroservice(authCheckerFactory, runtime)
 }
