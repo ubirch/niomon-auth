@@ -8,6 +8,7 @@ import com.softwaremill.sttp._
 import com.typesafe.scalalogging.StrictLogging
 import com.ubirch.messageauth.AuthCheckers.{AuthChecker, CheckResult}
 import com.ubirch.niomon.base.NioMicroservice
+import com.ubirch.niomon.util.EnrichedMap.toEnrichedMap
 
 import scala.concurrent.duration._
 import scala.util.Try
@@ -23,7 +24,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
 
   def checkCumulocity(headers: Map[String, String]): CheckResult = {
     val cumulocityInfo = getCumulocityInfo(headers)
-    headers.get(HeaderKeys.AUTHORIZATION) match {
+    headers.CaseInsensitive.get(HeaderKeys.AUTHORIZATION) match {
       case Some(auth) if auth.startsWith("Basic ") => checkCumulocityBasicCached(auth, cumulocityInfo)
       case None => checkCumulocityOAuthCached(headers, cumulocityInfo)
     }
@@ -32,8 +33,9 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   case class CumulocityInfo(baseUrl: String, tenant: String)
 
   def getCumulocityInfo(headers: Map[String, String]): CumulocityInfo = {
-    CumulocityInfo(headers.getOrElse(HeaderKeys.XCUMULOCITYBASEURL, defaultCumulocityBaseUrl),
-      headers.getOrElse(HeaderKeys.XCUMULOCITYTENANT, defaultCumulocityTenant))
+    CumulocityInfo(
+      headers.CaseInsensitive.getOrElse(HeaderKeys.XCUMULOCITYBASEURL, defaultCumulocityBaseUrl),
+      headers.CaseInsensitive.getOrElse(HeaderKeys.XCUMULOCITYTENANT, defaultCumulocityTenant))
   }
 
   // we cache authentication iff it is successful!
@@ -86,9 +88,9 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     logger.debug("doing OAuth authentication")
     logger.warn("OAuth authentication is unsupported at `ubirch` tenant")
 
-    val xsrfToken = headers.get(HeaderKeys.XXSRFTOKEN)
-    val authorizationHeader = headers.get(HeaderKeys.AUTHORIZATION)
-    val authorizationCookie = headers.get(HeaderKeys.COOKIE).flatMap { cookiesStr =>
+    val xsrfToken = headers.CaseInsensitive.get(HeaderKeys.XXSRFTOKEN)
+    val authorizationHeader = headers.CaseInsensitive.get(HeaderKeys.AUTHORIZATION)
+    val authorizationCookie = headers.CaseInsensitive.get(HeaderKeys.COOKIE).flatMap { cookiesStr =>
       cookiesStr match {
         case authorizationCookieRegex(authCookie) => Some(authCookie)
         case _ => None
@@ -112,7 +114,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   }
 
   def checkMulti(headers: Map[String, String]): CheckResult = {
-    headers.getOrElse(HeaderKeys.XUBIRCHAUTHTYPE, "cumulocity") match {
+    headers.CaseInsensitive.getOrElse(HeaderKeys.XUBIRCHAUTHTYPE, "cumulocity") match {
       case "cumulocity" =>
         logger.debug("checkMulti: cumulocity")
         checkCumulocity(headers)
@@ -141,10 +143,10 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     uri <- Uri.parse(rawUrl).toEither
       .left.map(cause => new IllegalArgumentException(s"could not parse ubirch.authUrl = [$rawUrl]", cause))
 
-    hardwareId <- headers.get(HeaderKeys.XUBIRCHHARDWAREID)
+    hardwareId <- headers.CaseInsensitive.get(HeaderKeys.XUBIRCHHARDWAREID)
       .toRight(new NoSuchElementException("missing X-Ubirch-Hardware-Id header"))
 
-    ubirchCredential <- headers.get(HeaderKeys.XUBIRCHCREDENTIAL)
+    ubirchCredential <- headers.CaseInsensitive.get(HeaderKeys.XUBIRCHCREDENTIAL)
       .toRight(new NoSuchElementException("missing X-Ubirch-Credential header"))
 
     deviceInfoTokenResponse <- sttp.get(uri)

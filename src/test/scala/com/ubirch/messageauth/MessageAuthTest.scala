@@ -6,6 +6,7 @@ import java.util.Base64
 import com.typesafe.config.ConfigFactory
 import com.ubirch.messageauth.AuthCheckers.CheckResult
 import com.ubirch.niomon.base.{NioMicroservice, NioMicroserviceMock}
+import com.ubirch.niomon.util.EnrichedMap.toEnrichedMap
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.header.Header
 import org.apache.kafka.common.header.internals.RecordHeader
@@ -123,14 +124,14 @@ class MessageAuthTest extends FlatSpec with Matchers with BeforeAndAfterAll {
 
   it should "direct messages according to passed AuthChecker" in {
     val microservice = messageAuthMicroservice(_ => { headers =>
-      AuthCheckers.boolToArbitraryRejectionCheckResult(headers.get("x-must-be-even").exists(_.toInt % 2 == 0))
+      AuthCheckers.boolToArbitraryRejectionCheckResult(headers.CaseInsensitive.get("X-Must-Be-Even").exists(_.toInt % 2 == 0))
     })
     microservice.outputTopics = Map("authorized" -> "auth", "unauthorized" -> "unauth")
     import microservice.kafkaMocks._
 
-    publishToKafka(arbitraryRecordWithHeaders("input", "x-must-be-even" -> "0"))
-    publishToKafka(arbitraryRecordWithHeaders("input", "x-must-be-even" -> "1"))
-    publishToKafka(arbitraryRecordWithHeaders("input", "x-must-be-even" -> "2"))
+    publishToKafka(arbitraryRecordWithHeaders("input", "X-Must-Be-Even" -> "0"))
+    publishToKafka(arbitraryRecordWithHeaders("input", "X-Must-Be-Even" -> "1"))
+    publishToKafka(arbitraryRecordWithHeaders("input", "X-Must-Be-Even" -> "2"))
 
     val authorized = consumeNumberStringMessagesFrom("auth", 2)
     val unauthorized = consumeNumberStringMessagesFrom("unauth", 1)
