@@ -37,6 +37,7 @@
 
     <logger name="com.ubirch" level="DEBUG"/>
     <logger name="com.ubirch.niomon.cache.RedisCache" level="WARN"/>
+    <logger name="com.ubirch.messageauth.AuthCheckers" level="WARN"/>
     <logger name="com.ubirch.niomon.base" level="WARN"/>
 
     <logger name="org.apache.kafka" level="WARN"/>
