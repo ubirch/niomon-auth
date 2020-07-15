@@ -14,9 +14,8 @@ class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => Aut
   val unauthorizedTopic: String = outputTopics("unauthorized")
 
   override def processRecord(record: ConsumerRecord[String, Array[Byte]]): ProducerRecord[String, Array[Byte]] = {
-    val headers = record.headersScala
 
-    val CheckResult(rejectionReason, headersToAdd) = checkAuth(headers)
+    val CheckResult(rejectionReason, headersToAdd) = checkAuth(record.headersScala)
 
     rejectionReason match {
       case None =>
