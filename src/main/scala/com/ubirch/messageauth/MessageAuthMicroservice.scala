@@ -13,18 +13,20 @@ class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => Aut
   val authorizedTopic: String = outputTopics("authorized")
   val unauthorizedTopic: String = outputTopics("unauthorized")
 
-  override def processRecord(record: ConsumerRecord[String, Array[Byte]]): ProducerRecord[String, Array[Byte]] = {
+  def processRecord(input: ConsumerRecord[String, Array[Byte]]): ProducerRecord[String, Array[Byte]] = {
 
-    val CheckResult(rejectionReason, headersToAdd) = checkAuth(record.headersScala)
+    val requestId = input.requestIdHeader().orNull
+
+    val CheckResult(rejectionReason, headersToAdd) = checkAuth(input.headersScala)
 
     rejectionReason match {
       case None =>
-        logger.info(s"request [{}] is authorized", v("requestId", record.key()))
-        record.toProducerRecord(authorizedTopic).withExtraHeaders(headersToAdd.toSeq: _*)
+        logger.info(s"request [{}] is authorized", v("requestId", requestId))
+        input.toProducerRecord(authorizedTopic).withExtraHeaders(headersToAdd.toSeq: _*)
       case Some(reason) =>
-        logger.info(s"request [{}] is NOT authorized; reason: {}", v("requestId", record.key()),
+        logger.info(s"request [{}] is NOT authorized; reason: {}", v("requestId", requestId),
           v("notAuthorizedReason", reason.getMessage))
-        record.toProducerRecord(unauthorizedTopic).withExtraHeaders("http-status-code" -> "401")
+        input.toProducerRecord(unauthorizedTopic).withExtraHeaders("http-status-code" -> "401")
     }
   }
 }
