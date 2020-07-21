@@ -8,14 +8,12 @@ import com.ubirch.messageauth.AuthCheckers.CheckResult
 import com.ubirch.niomon.base.{NioMicroservice, NioMicroserviceMock}
 import com.ubirch.niomon.util.EnrichedMap.toEnrichedMap
 import org.apache.kafka.clients.producer.ProducerRecord
-import org.apache.kafka.common.header.Header
-import org.apache.kafka.common.header.internals.RecordHeader
+import com.ubirch.kafka.RichAnyProducerRecord
 import org.apache.kafka.common.serialization.{ByteArraySerializer, StringDeserializer}
 import org.nustaq.serialization.FSTConfiguration
 import org.redisson.codec.FstCodec
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 
@@ -162,7 +160,6 @@ class MessageAuthTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     NioMicroserviceMock(MessageAuthMicroservice(checkerFactory))
 
   private def arbitraryRecordWithHeaders(topic: String, headers: (String, String)*): ProducerRecord[String, Array[Byte]] =
-    new ProducerRecord[String, Array[Byte]](topic, null, null, "key", "value".getBytes(UTF_8),
-      (for {(k, v) <- headers} yield new RecordHeader(k, v.getBytes(UTF_8)): Header).toList.asJava
-    )
+    new ProducerRecord[String, Array[Byte]](topic, "value".getBytes(UTF_8)).withHeaders(headers : _ *)
+
 }
