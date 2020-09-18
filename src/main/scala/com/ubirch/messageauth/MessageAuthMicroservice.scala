@@ -23,10 +23,21 @@ class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => Aut
     rejectionReason match {
       case None =>
         logger.info(s"request [{}] is authorized", v("requestId", requestId))
-        record.toProducerRecord(authorizedTopic).withExtraHeaders(headersToAdd.toSeq: _*)
+        record
+          .toProducerRecord[Array[Byte]](authorizedTopic)
+          .withExtraHeaders(headersToAdd.toSeq: _*)
+
       case Some(reason) =>
-        logger.info(s"request [{}] is NOT authorized; reason: {}", v("requestId", requestId), v("notAuthorizedReason", reason.getMessage))
-        record.toProducerRecord(unauthorizedTopic).withExtraHeaders("http-status-code" -> "401")
+
+        logger.info(s"request [{}] is NOT authorized; reason: {}",
+          v("requestId", requestId),
+          v("notAuthorizedReason", reason.getMessage))
+
+        record
+          .toProducerRecord[Array[Byte]](unauthorizedTopic)
+          .withExtraHeaders(
+            "http-status-code" -> "401",
+            "x-code" -> AuthCheckers.xcode(reason).toString)
     }
 
   }
