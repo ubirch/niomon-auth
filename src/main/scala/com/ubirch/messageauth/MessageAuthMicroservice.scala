@@ -1,5 +1,6 @@
 package com.ubirch.messageauth
 
+import com.cumulocity.sdk.client.SDKException
 import com.ubirch.kafka._
 import com.ubirch.messageauth.AuthCheckers.{AuthChecker, CheckResult}
 import com.ubirch.niomon.base.{NioMicroservice, NioMicroserviceLogic}
@@ -37,10 +38,19 @@ class MessageAuthMicroservice(authCheckerFactory: NioMicroservice.Context => Aut
           .toProducerRecord[Array[Byte]](unauthorizedTopic)
           .withExtraHeaders(
             "http-status-code" -> "401",
-            "x-code" -> AuthCheckers.xcode(reason).toString)
+            "x-code" -> xcode(reason).toString)
     }
 
   }
+
+  def xcode(reason: Throwable): Int = reason match {
+    case _: NoSuchElementException => 1000
+    case _: IllegalArgumentException => 2000
+    case _: SDKException => 3000
+    case _: RuntimeException => 4000
+    case _ => 5000
+  }
+
 }
 
 object MessageAuthMicroservice {

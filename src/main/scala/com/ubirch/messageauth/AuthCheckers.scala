@@ -185,12 +185,4 @@ object AuthCheckers {
 
   type AuthChecker = Map[String, String] => CheckResult
 
-  def xcode(reason: Throwable): Int = reason match {
-      case _: NoSuchMethodException => 100
-      case _: IllegalArgumentException => 200
-      case _: SDKException => 300
-      case _: RuntimeException => 400
-      case _ => 500
-    }
-
 }
