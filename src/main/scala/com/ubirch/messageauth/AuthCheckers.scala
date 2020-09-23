@@ -184,4 +184,5 @@ object AuthCheckers {
     CheckResult(rejectionReason = if (isAuthPassed) None else Some(new Exception("arbitrary rejection")))
 
   type AuthChecker = Map[String, String] => CheckResult
+
 }
