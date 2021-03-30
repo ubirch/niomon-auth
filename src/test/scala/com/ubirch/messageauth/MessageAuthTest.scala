@@ -82,6 +82,45 @@ class MessageAuthTest extends FlatSpec with Matchers with BeforeAndAfterAll {
     res.rejectionReason.get.getMessage should include ("X-Ubirch-Credential")
   }
 
+  // ignored by default, because it does an external request
+  "checkTokenUbirch" should "authorize with device id and token passed in" ignore {
+    val deviceId = "55424952-3c71-bf80-26dc-3c71bf8026dc"
+    val token = "MDAwMjY5MmItNGRkYy00MDAzLWJhNjEtNTQ0ZDViODRjZTlm"
+
+    val res = new AuthCheckers(context).checkUbirchToken(Map(
+      "X-Ubirch-Hardware-Id" -> deviceId,
+      "X-Ubirch-Credential" -> token
+    ))
+
+    res.isAuthPassed should equal (true)
+    res.headersToAdd should have size (1)
+    res.headersToAdd.keys should contain ("X-Ubirch-DeviceInfo-Token")
+  }
+
+  it should "fail when device id is missing" in {
+    val token = "MDAwMjY5MmItNGRkYy00MDAzLWJhNjEtNTQ0ZDViODRjZTlm"
+
+    val res = new AuthCheckers(context).checkUbirchToken(Map(
+      "X-Ubirch-Credential" -> token
+    ))
+
+    res.isAuthPassed should equal (false)
+    res.headersToAdd should have size (0)
+    res.rejectionReason.get.getMessage should include ("X-Ubirch-Hardware-Id")
+  }
+
+  it should "fail when token is missing" in {
+    val deviceId = "55424952-3c71-bf80-26dc-3c71bf8026dc"
+
+    val res = new AuthCheckers(context).checkUbirchToken(Map(
+      "X-Ubirch-Hardware-Id".toLowerCase -> deviceId
+    ))
+
+    res.isAuthPassed should equal (false)
+    res.headersToAdd should have size (0)
+    res.rejectionReason.get.getMessage should include ("X-Ubirch-Credential")
+  }
+
   "authFlow" should "direct messages to authorized topic if authorized" in {
     val microservice = messageAuthMicroservice(new AuthCheckers(_).alwaysAccept)
     microservice.outputTopics = Map("authorized" -> "auth", "unauthorized" -> "unauth")
