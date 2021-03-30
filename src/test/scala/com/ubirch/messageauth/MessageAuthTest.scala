@@ -85,7 +85,7 @@ class MessageAuthTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   // ignored by default, because it does an external request
   "checkTokenUbirch" should "authorize with device id and token passed in" ignore {
     val deviceId = "55424952-3c71-bf80-26dc-3c71bf8026dc"
-    val token = "MDAwMjY5MmItNGRkYy00MDAzLWJhNjEtNTQ0ZDViODRjZTlm"
+    val token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3Rva2VuLmRldi51YmlyY2guY29tIiwic3ViIjoiOTYzOTk1ZWQtY2UxMi00ZWE1LTg5ZGMtYjE4MTcwMWQxZDdiIiwiYXVkIjpbImh0dHBzOi8vYXBpLmNvbnNvbGUuZGV2LnViaXJjaC5jb20iLCJodHRwczovL25pb21vbi5kZXYudWJpcmNoLmNvbSIsImh0dHBzOi8vdmVyaWZ5LmRldi51YmlyY2guY29tIl0sImV4cCI6NzkyODAwMDg1MiwiaWF0IjoxNjE2NjEwNDUyLCJqdGkiOiJmMTMwNmJhYi0zODIzLTRkYWUtYTIxZS03ZmJiMDFiNmI5ODciLCJzY3AiOlsidGhpbmc6Y3JlYXRlIiwidXBwOmFuY2hvciIsInVwcDp2ZXJpZnkiXSwicHVyIjoiS2luZyBEdWRlIC0gQ29uY2VydCIsInRncCI6W10sInRpZCI6WyI4NDBiN2UyMS0wM2U5LTRkZTctYmIzMS0wYjk1MjRmM2I1MDAiXSwib3JkIjpbImh0dHA6Ly92ZXJpZmljYXRpb24uZGV2LnViaXJjaC5jb20iXX0.0-CA-dhgbRjzWbCjX1e3B08bSiPDbeZfBDb85uJPf3rEuNNH6MeVk0RKt2MVq7DMYco_c5Wolf09wdKX8kRrIA"
 
     val res = new AuthCheckers(context).checkUbirchToken(Map(
       "X-Ubirch-Hardware-Id" -> deviceId,
@@ -98,7 +98,7 @@ class MessageAuthTest extends FlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   it should "fail when device id is missing" in {
-    val token = "MDAwMjY5MmItNGRkYy00MDAzLWJhNjEtNTQ0ZDViODRjZTlm"
+    val token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3Rva2VuLmRldi51YmlyY2guY29tIiwic3ViIjoiOTYzOTk1ZWQtY2UxMi00ZWE1LTg5ZGMtYjE4MTcwMWQxZDdiIiwiYXVkIjpbImh0dHBzOi8vYXBpLmNvbnNvbGUuZGV2LnViaXJjaC5jb20iLCJodHRwczovL25pb21vbi5kZXYudWJpcmNoLmNvbSIsImh0dHBzOi8vdmVyaWZ5LmRldi51YmlyY2guY29tIl0sImV4cCI6NzkyODAwMDg1MiwiaWF0IjoxNjE2NjEwNDUyLCJqdGkiOiJmMTMwNmJhYi0zODIzLTRkYWUtYTIxZS03ZmJiMDFiNmI5ODciLCJzY3AiOlsidGhpbmc6Y3JlYXRlIiwidXBwOmFuY2hvciIsInVwcDp2ZXJpZnkiXSwicHVyIjoiS2luZyBEdWRlIC0gQ29uY2VydCIsInRncCI6W10sInRpZCI6WyI4NDBiN2UyMS0wM2U5LTRkZTctYmIzMS0wYjk1MjRmM2I1MDAiXSwib3JkIjpbImh0dHA6Ly92ZXJpZmljYXRpb24uZGV2LnViaXJjaC5jb20iXX0.0-CA-dhgbRjzWbCjX1e3B08bSiPDbeZfBDb85uJPf3rEuNNH6MeVk0RKt2MVq7DMYco_c5Wolf09wdKX8kRrIA"
 
     val res = new AuthCheckers(context).checkUbirchToken(Map(
       "X-Ubirch-Credential" -> token
