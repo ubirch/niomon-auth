@@ -101,6 +101,11 @@
 
         <!-- ubirch libs -->
         <dependency>
+            <groupId>com.ubirch</groupId>
+            <artifactId>ubirch-token-sdk</artifactId>
+            <version>0.6.5-SNAPSHOT</version>
+        </dependency>
+        <dependency>
             <groupId>com.ubirch.niomon</groupId>
             <artifactId>foundation</artifactId>
             <version>1.0.3-SNAPSHOT</version>

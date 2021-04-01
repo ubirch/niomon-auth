@@ -1,14 +1,16 @@
 package com.ubirch.messageauth
 
 import java.nio.charset.StandardCharsets
-import java.util.Base64
+import java.util.{Base64, UUID}
 
 import com.cumulocity.sdk.client.{PlatformBuilder, SDKException}
 import com.softwaremill.sttp._
 import com.typesafe.scalalogging.StrictLogging
+import com.ubirch.defaults.TokenApi
 import com.ubirch.messageauth.AuthCheckers.{AuthChecker, CheckResult}
 import com.ubirch.niomon.base.NioMicroservice
 import com.ubirch.niomon.util.EnrichedMap.toEnrichedMap
+import monix.execution.Scheduler.Implicits.global
 
 import scala.concurrent.duration._
 import scala.util.Try
@@ -121,6 +123,9 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
       case "keycloak" | "ubirch" =>
         logger.debug("checkMulti: keycloak/ubirch")
         checkUbirchCached(headers)
+      case "ubirch-token" =>
+        logger.debug("checkMulti: ubirch-token")
+        checkUbirchTokenCached(headers)
     }
   }
 
@@ -161,6 +166,36 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
     ))
 
     successfulResult = CheckResult(rejectionReason = None, headersToAdd = Map(HeaderKeys.XUBIRCHDEVICEINFOTOKEN -> deviceInfoToken))
+  } yield successfulResult).fold({ error =>
+    logger.error("error while authenticating", error)
+    CheckResult(rejectionReason = Some(error))
+  }, identity)
+
+  lazy val checkUbirchTokenCached: AuthChecker =
+    context.cached(checkUbirchToken _).buildCache("ubirch-auth-token-cache", shouldCache = { cr => cr.isAuthPassed })(
+      h => (h.get(HeaderKeys.XUBIRCHHARDWAREID), h.get(HeaderKeys.XUBIRCHCREDENTIAL)).toString()
+    )
+
+  def checkUbirchToken(headers: Map[String, String]): CheckResult = (for {
+    _ <- Right(()) // for some reason for expressions have to start with a `<-` binding
+
+    currentHeader = headers.seq.keys.toList.mkString(", ")
+    _ = logger.debug(s"checkUbirchToken: received headers = $currentHeader")
+
+    hardwareId <- headers.CaseInsensitive.get(HeaderKeys.XUBIRCHHARDWAREID)
+      .toRight(new NoSuchElementException("missing X-Ubirch-Hardware-Id header"))
+
+    ubirchToken <- headers.CaseInsensitive.get(HeaderKeys.XUBIRCHCREDENTIAL)
+      .toRight(new NoSuchElementException("missing X-Ubirch-Credential header"))
+
+    isValid <- TokenApi
+      //We use sync here because it is the easier way to integrate with current processing code.
+      .externalStateVerifySync(ubirchToken, UUID.fromString(hardwareId))(10.seconds)
+      .left.map(new RuntimeException("request to token service was not successful", _))
+
+    _ <- if(isValid) Right(isValid) else Left(new RuntimeException("Token is invalid"))
+
+    successfulResult = CheckResult(rejectionReason = None, headersToAdd = Map(HeaderKeys.XUBIRCHDEVICEINFOTOKEN -> ubirchToken))
   } yield successfulResult).fold({ error =>
     logger.error("error while authenticating", error)
     CheckResult(rejectionReason = Some(error))
