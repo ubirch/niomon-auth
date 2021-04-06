@@ -172,7 +172,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
   }, identity)
 
   lazy val checkUbirchTokenCached: AuthChecker =
-    context.cached(checkUbirchToken _).buildCache("ubirch-auth-token-cache", shouldCache = { cr => cr.isAuthPassed })(
+    context.cached(checkUbirchToken _).buildCache("ubirch-auth-cache", shouldCache = { cr => cr.isAuthPassed })(
       h => (h.get(HeaderKeys.XUBIRCHHARDWAREID), h.get(HeaderKeys.XUBIRCHCREDENTIAL)).toString()
     )
 
@@ -186,6 +186,7 @@ class AuthCheckers(context: NioMicroservice.Context) extends StrictLogging {
       .toRight(new NoSuchElementException("missing X-Ubirch-Hardware-Id header"))
 
     ubirchToken <- headers.CaseInsensitive.get(HeaderKeys.XUBIRCHCREDENTIAL)
+      .filter(_.nonEmpty)
       .toRight(new NoSuchElementException("missing X-Ubirch-Credential header"))
 
     isValid <- TokenApi
