@@ -80,7 +80,7 @@
         <skinny-framework.version>3.0.1</skinny-framework.version>
 
         <!-- required for integration to sonarqube for code analyzing -->
-        <sonar.projectKey>ubirch_ubirch-event-log</sonar.projectKey>
+        <sonar.projectKey>ubirch_niomon-auth</sonar.projectKey>
     </properties>
 
     <dependencies>
