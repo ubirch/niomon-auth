@@ -55,6 +55,12 @@
             <organization>ubirch GmbH</organization>
             <organizationUrl>https://ubirch.com/</organizationUrl>
         </developer>
+        <developer>
+            <name>Carlos Sanchez</name>
+            <email>carlos.sanchezi@ubirch.com</email>
+            <organization>ubirch GmbH</organization>
+            <organizationUrl>https://ubirch.com/</organizationUrl>
+        </developer>
     </developers>
 
     <scm>
@@ -103,7 +109,7 @@
         <dependency>
             <groupId>com.ubirch</groupId>
             <artifactId>ubirch-token-sdk</artifactId>
-            <version>2.0.1-SNAPSHOT</version>
+            <version>2.0.4-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.ubirch.niomon</groupId>
@@ -172,17 +178,11 @@
     </build>
 
     <repositories>
-        <!-- simple kafka client -->
-        <repository>
-            <id>bintray-cakesolutions-maven</id>
-            <name>bintray</name>
-            <url>http://dl.bintray.com/cakesolutions/maven</url>
-        </repository>
 
         <repository>
             <id>cumulocity-public</id>
             <name>cumulocity</name>
-            <url>http://download.cumulocity.com/maven/repository</url>
+            <url>https://download.cumulocity.com/maven/repository</url>
         </repository>
 
         <repository>
